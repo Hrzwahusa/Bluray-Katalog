@@ -123,6 +123,16 @@ export default function ScanScreen() {
     }
   }
 
+  const startManualTitleSearch = useCallback(() => {
+    setCapturedUri(null)
+    setOcrText('')
+    setCandidates([])
+    setSelectedMovie(null)
+    setError(null)
+    setStatus('')
+    setStep('search')
+  }, [])
+
   // ── Speichern ───────────────────────────────────────────────────────
   const saveSelectedMovie = async () => {
     if (!selectedMovie) return
@@ -198,6 +208,9 @@ export default function ScanScreen() {
           <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={pickFromGallery}>
             <Text style={styles.btnText}>Aus Galerie wählen</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={startManualTitleSearch}>
+            <Text style={styles.btnText}>Titel manuell eingeben</Text>
+          </TouchableOpacity>
         </View>
       )
     }
@@ -216,7 +229,9 @@ export default function ScanScreen() {
             <Text style={styles.galleryBtnText}>📁 Galerie</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.captureBtn} onPress={takePicture} />
-          <View style={{ width: 72 }} />
+          <TouchableOpacity style={styles.galleryBtn} onPress={startManualTitleSearch}>
+            <Text style={styles.galleryBtnText}>⌨️ Titel</Text>
+          </TouchableOpacity>
         </View>
       </View>
     )

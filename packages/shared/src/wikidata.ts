@@ -68,41 +68,72 @@ SELECT DISTINCT ?movie ?movieLabel ?originalTitleLabel ?year ?genreLabel ?actorL
  */
 export async function searchMovieFuzzy(query: string, language = 'de'): Promise<WikidataMovie[]> {
   const langCode = language === 'de' ? 'de' : 'en'
+  const searchLanguages = Array.from(new Set([langCode, 'en']))
+  const searchTerms = buildSearchTerms(query)
+  let successfulSearchRequests = 0
 
-  // ── Schritt 1: Schnellsuche nach Entitäten ─────────────────────────
-  const searchParams = new URLSearchParams({
-    action: 'wbsearchentities',
-    search: query,
-    language: langCode,
-    type: 'item',
-    format: 'json',
-    limit: '20',
-    uselang: langCode,
-    origin: '*',
-  })
-  const searchRes = await fetchWithRetry(`https://www.wikidata.org/w/api.php?${searchParams}`, {
-    headers: { 'User-Agent': 'BluRay-Katalog/1.0' },
-  })
-  if (!searchRes.ok) throw new Error(`Wikidata-Suchfehler: ${searchRes.status}`)
-  const searchData = await searchRes.json()
-  const items: Array<{ id: string; label: string; description?: string }> = searchData.search || []
+  // ── Schritt 1: Schnellsuche nach Entitäten (mehrsprachig + Varianten) ──
+  const itemMap = new Map<string, { id: string; label: string; description?: string }>()
+
+  for (const lang of searchLanguages) {
+    for (const searchTerm of searchTerms) {
+      const searchParams = new URLSearchParams({
+        action: 'wbsearchentities',
+        search: searchTerm,
+        language: lang,
+        type: 'item',
+        format: 'json',
+        limit: '50',
+        uselang: langCode,
+        origin: '*',
+      })
+
+      try {
+        const searchRes = await fetchWithRetry(`https://www.wikidata.org/w/api.php?${searchParams}`, {
+          headers: { 'User-Agent': 'BluRay-Katalog/1.0' },
+        })
+
+        if (!searchRes.ok) continue
+        const searchData = await searchRes.json()
+        const foundItems: Array<{ id: string; label: string; description?: string }> = searchData.search || []
+        successfulSearchRequests++
+
+        for (const item of foundItems) {
+          if (!itemMap.has(item.id)) itemMap.set(item.id, item)
+        }
+      } catch {
+        // Teilfehler (Rate-Limit etc.) nicht abbrechen, andere Varianten weiterprobieren.
+      }
+    }
+  }
+
+  if (successfulSearchRequests === 0) {
+    throw new Error('Wikidata-Suchfehler: Keine Suchanfrage erfolgreich (Rate-Limit). Bitte kurz erneut versuchen.')
+  }
+
+  const items = Array.from(itemMap.values())
   if (items.length === 0) return []
 
   // ── Schritt 2: Entitäten-Details per wbgetentities ─────────────────
-  const ids = items.map((i) => i.id).join('|')
-  const entityParams = new URLSearchParams({
-    action: 'wbgetentities',
-    ids,
-    props: 'labels|claims|descriptions',
-    languages: `${langCode}|en`,
-    format: 'json',
-    origin: '*',
-  })
-  const entityRes = await fetchWithRetry(`https://www.wikidata.org/w/api.php?${entityParams}`, {
-    headers: { 'User-Agent': 'BluRay-Katalog/1.0' },
-  })
-  if (!entityRes.ok) throw new Error(`Wikidata-Detailfehler: ${entityRes.status}`)
-  const entityData = await entityRes.json()
+  const entityData: { entities: Record<string, any> } = { entities: {} }
+  const idBatches = chunkArray(items.map((i) => i.id), 50)
+
+  for (const batch of idBatches) {
+    const entityParams = new URLSearchParams({
+      action: 'wbgetentities',
+      ids: batch.join('|'),
+      props: 'labels|claims|descriptions',
+      languages: `${langCode}|en`,
+      format: 'json',
+      origin: '*',
+    })
+    const entityRes = await fetchWithRetry(`https://www.wikidata.org/w/api.php?${entityParams}`, {
+      headers: { 'User-Agent': 'BluRay-Katalog/1.0' },
+    })
+    if (!entityRes.ok) throw new Error(`Wikidata-Detailfehler: ${entityRes.status}`)
+    const batchData = await entityRes.json()
+    entityData.entities = { ...entityData.entities, ...(batchData.entities ?? {}) }
+  }
 
   // Film-QIDs: Spielfilm, Animationsfilm, Dokumentarfilm, Kurzfilm, …
   const filmTypeQids = new Set([
@@ -119,6 +150,8 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
   const resolvedImageUrls = await resolveCommonsFileNames(Array.from(imageFiles), 300)
 
   const results: WikidataMovie[] = []
+  const queryNorm = normalizeSearchText(query)
+  const queryTokens = toSearchTokens(queryNorm)
 
   for (const item of items) {
     const entity = entityData.entities?.[item.id]
@@ -132,7 +165,10 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((c: any) => c.mainsnak?.datavalue?.value?.id)
       .filter(Boolean)
-    if (instanceOf.length > 0 && !instanceOf.some((id) => filmTypeQids.has(id))) continue
+
+    const descriptionText =
+      entity.descriptions?.[langCode]?.value || entity.descriptions?.en?.value || item.description || ''
+    if (!isLikelyMovieEntity(instanceOf, claims, descriptionText, filmTypeQids)) continue
 
     // Erscheinungsjahr (P577)
     const releaseTime: string | undefined = claims.P577?.[0]?.mainsnak?.datavalue?.value?.time
@@ -155,8 +191,7 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
     const title = entity.labels?.[langCode]?.value || entity.labels?.en?.value || item.label
     const enTitle = entity.labels?.en?.value
     const originalTitle = enTitle && enTitle !== title ? enTitle : undefined
-    const description =
-      entity.descriptions?.[langCode]?.value || entity.descriptions?.en?.value
+    const description = descriptionText || undefined
 
     results.push({
       wikidataId: item.id,
@@ -173,6 +208,14 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
   }
 
   return results
+    .sort((a, b) => {
+      const aScore = scoreMovieMatch(a, queryNorm, queryTokens)
+      const bScore = scoreMovieMatch(b, queryNorm, queryTokens)
+      if (aScore !== bScore) return bScore - aScore
+      if ((a.year ?? 0) !== (b.year ?? 0)) return (b.year ?? 0) - (a.year ?? 0)
+      return a.title.localeCompare(b.title)
+    })
+    .slice(0, 30)
 }
 
 /**
@@ -460,4 +503,157 @@ function simpleHash(str: string): string {
   }
   const h = Math.abs(hash).toString(16).padStart(8, '0')
   return h
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size))
+  }
+  return chunks
+}
+
+function buildSearchTerms(query: string): string[] {
+  const raw = query.trim()
+  if (!raw) return []
+
+  const terms = new Set<string>()
+  const cleaned = raw.replace(/[.,!?]+$/g, '').trim()
+  const aliasVariants = applyTitleAliases(cleaned)
+  const franchiseVariants = buildFranchiseTitleVariants(cleaned)
+
+  const baseVariants: string[] = []
+  for (const source of aliasVariants) {
+    baseVariants.push(
+      source,
+      source.replace(/[:|]/g, ' '),
+      source.replace(/[-\u2010-\u2015]/g, ' '),
+      source.replace(/[-\u2010-\u2015]/g, '')
+    )
+  }
+
+  for (const variant of [...franchiseVariants, ...baseVariants]) {
+    const normalized = variant.replace(/\s+/g, ' ').trim()
+    if (!normalized) continue
+    terms.add(normalized)
+  }
+
+  const queryTokens = normalizeSearchText(cleaned).split(' ').filter(Boolean)
+  if (queryTokens.length === 1 && queryTokens[0].length >= 3) {
+    const franchise = queryTokens[0]
+    terms.add(`${franchise} 2`)
+    terms.add(`${franchise} 3`)
+    terms.add(`${franchise} 4`)
+  }
+
+  const queryNorm = normalizeSearchText(cleaned)
+  if (queryNorm.includes('thor') && (queryNorm.includes('dark kingdom') || queryNorm.includes('dark world'))) {
+    terms.add('thor 2')
+  }
+
+  // Nur fuer die ersten Hauptvarianten den "film"-Zusatz anfuegen,
+  // damit wir Rate-Limits vermeiden und trotzdem gute Treffer bekommen.
+  for (const variant of Array.from(terms).slice(0, 3)) {
+    terms.add(`${variant} film`)
+  }
+
+  return Array.from(terms).slice(0, 9)
+}
+
+function applyTitleAliases(value: string): string[] {
+  const variants = new Set<string>([value])
+  const lower = value.toLowerCase()
+
+  // OCR verwechselt bei Thor haeufig "Dark World" mit "Dark Kingdom".
+  if (lower.includes('dark kingdom')) {
+    variants.add(value.replace(/dark kingdom/gi, 'Dark World'))
+  }
+
+  return Array.from(variants)
+}
+
+function buildFranchiseTitleVariants(value: string): string[] {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  const variants = new Set<string>()
+
+  const spiderMatch = normalized.match(/^spider(?:[- ]?man)\s+(.+)$/i)
+  if (spiderMatch?.[1]) {
+    const rest = spiderMatch[1].trim()
+    variants.add(`Spider-Man: ${rest}`)
+  }
+
+  const thorMatch = normalized.match(/^thor\s+(.+)$/i)
+  if (thorMatch?.[1]) {
+    const rest = thorMatch[1].trim()
+    variants.add(`Thor: ${rest}`)
+  }
+
+  return Array.from(variants)
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function toSearchTokens(value: string): string[] {
+  if (!value) return []
+  return value.split(' ').filter(Boolean)
+}
+
+function scoreMovieMatch(movie: WikidataMovie, queryNorm: string, queryTokens: string[]): number {
+  const titleNorm = normalizeSearchText(movie.title)
+  const originalNorm = normalizeSearchText(movie.originalTitle ?? '')
+  const descriptionNorm = normalizeSearchText(movie.description ?? '')
+  const haystacks = [titleNorm, originalNorm].filter(Boolean)
+
+  let score = 0
+
+  if (haystacks.some((t) => t === queryNorm)) score += 220
+  if (haystacks.some((t) => t.startsWith(queryNorm))) score += 130
+  if (haystacks.some((t) => t.includes(queryNorm))) score += 90
+
+  const tokenHits = queryTokens.filter((token) => haystacks.some((t) => t.includes(token))).length
+  score += tokenHits * 22
+
+  if (descriptionNorm.includes('film')) score += 10
+  if (descriptionNorm.includes('movie')) score += 8
+
+  if (/tv series|fernsehserie|episode|character|comic|album|soundtrack|disambiguation/.test(descriptionNorm)) {
+    score -= 120
+  }
+
+  return score
+}
+
+function isLikelyMovieEntity(
+  instanceOf: string[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  claims: Record<string, any[]>,
+  description: string,
+  filmTypeQids: Set<string>
+): boolean {
+  const desc = normalizeSearchText(description)
+  if (!desc) return false
+
+  if (/soundtrack|album|poster|video game|news article|character|deity|given name|genus|thoroughfare|medical procedure|podcast|disambiguation/.test(desc)) {
+    return false
+  }
+
+  const hasMovieKeywords = /\bfilm\b|\bmovie\b|kinofilm|spielfilm/.test(desc)
+  const hasReleaseDate = Array.isArray(claims.P577) && claims.P577.length > 0
+  const hasImdbId = Array.isArray(claims.P345) && claims.P345.length > 0
+  const hasMovieMetadata = hasReleaseDate || hasImdbId
+
+  if (instanceOf.some((id) => filmTypeQids.has(id))) return true
+
+  // Ohne P31 nur behalten, wenn die Entitaet dennoch klar wie ein Film aussieht.
+  if (instanceOf.length === 0) return hasMovieKeywords && hasMovieMetadata
+
+  // Fallback fuer Film-Untertypen, die nicht direkt in filmTypeQids stehen.
+  return hasMovieKeywords && hasMovieMetadata
 }

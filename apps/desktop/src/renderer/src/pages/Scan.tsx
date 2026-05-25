@@ -137,6 +137,17 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     }
   }
 
+  const startManualTitleSearch = useCallback(() => {
+    if (cameraActive) stopCamera()
+    setCapturedImage(null)
+    setOcrText('')
+    setCandidates([])
+    setSelectedMovie(null)
+    setError(null)
+    setStatusMessage('')
+    setStep('select')
+  }, [cameraActive, stopCamera])
+
   // ── Film bestätigen ─────────────────────────────────────────────────
   const confirmAndSave = async () => {
     if (!selectedMovie) return
@@ -236,13 +247,21 @@ export function Scan({ settings, onSuccess }: ScanProps) {
 
             <div className="flex gap-3">
               {!cameraActive ? (
-                <button
-                  onClick={startCamera}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-lg transition-colors"
-                >
-                  <span className="w-5 h-5"><Camera /></span>
-                  Kamera starten
-                </button>
+                <>
+                  <button
+                    onClick={startCamera}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-lg transition-colors"
+                  >
+                    <span className="w-5 h-5"><Camera /></span>
+                    Kamera starten
+                  </button>
+                  <button
+                    onClick={startManualTitleSearch}
+                    className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                  >
+                    Titel manuell eingeben
+                  </button>
+                </>
               ) : (
                 <>
                   <button

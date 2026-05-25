@@ -1,6 +1,6 @@
 {
   "name": "bluray-katalog-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "BluRay-Katalog Desktop-App (Windows & Linux)",
   "main": "out/main/index.js",
   "private": true,
@@ -23,7 +23,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
-    "electron": "^33.2.0",
+    "electron": "33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "postcss": "^8.4.49",

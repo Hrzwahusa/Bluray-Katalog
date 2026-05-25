@@ -104,6 +104,12 @@ cd apps/android
 eas build --platform android
 ```
 
+## Releases
+
+- Desktop-Pakete lassen sich mit `npm run desktop:package` erzeugen.
+- Android-Builds lassen sich mit EAS über `eas build --platform android` erzeugen.
+- Für GitHub Releases empfiehlt sich, die erzeugten Desktop-Artefakte oder Android-Builds erst nach einem verifizierten Tag hochzuladen und nicht im Repository selbst zu versionieren.
+
 ## Technologie-Stack
 
 | Bereich | Technologie |
@@ -136,3 +142,8 @@ Die zentrale Tabelle `movies` wird über [supabase/schema.sql](supabase/schema.s
 
 - Zugangsdaten werden lokal in den jeweiligen Apps gespeichert und nicht im Repository verwaltet.
 - Build-Artefakte, lokale SDK-Pfade und Abhängigkeiten sollten nicht versioniert werden.
+
+## Lizenz
+
+Dieses Projekt steht unter der MIT-Lizenz. Details siehe [LICENSE](LICENSE).
+

@@ -27,7 +27,6 @@ function CoverImage({ uri, title, style }: { uri: string; title: string; style: 
     return (
       <View style={[style, styles.coverPlaceholder]}>
         <Text style={styles.coverPlaceholderText}>🎬</Text>
-        <Text style={styles.coverDebugText} numberOfLines={3}>{uri}</Text>
       </View>
     )
   }
@@ -37,10 +36,7 @@ function CoverImage({ uri, title, style }: { uri: string; title: string; style: 
       source={{ uri, headers: IMAGE_HEADERS }}
       style={style}
       resizeMode="cover"
-      onError={(event) => {
-        console.warn('Cover image failed', { title, uri, error: event.nativeEvent.error })
-        setFailed(true)
-      }}
+      onError={() => setFailed(true)}
     />
   )
 }
@@ -219,7 +215,6 @@ const styles = StyleSheet.create({
   cover: { width: '100%', aspectRatio: 2 / 3 },
   coverPlaceholder: { backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' },
   coverPlaceholderText: { fontSize: 36 },
-  coverDebugText: { color: '#94a3b8', fontSize: 9, paddingHorizontal: 6, paddingBottom: 6, textAlign: 'center' },
   cardInfo: { padding: 8 },
   cardTitle: { color: '#fff', fontSize: 12, fontWeight: '600', lineHeight: 16 },
   cardYear: { color: '#6366f1', fontSize: 11, marginTop: 2 },

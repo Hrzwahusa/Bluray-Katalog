@@ -26,7 +26,6 @@ function CoverImage({ uri, title }: { uri: string; title: string }) {
     return (
       <View style={[styles.cover, styles.coverPlaceholder]}>
         <Text style={{ fontSize: 48 }}>🎬</Text>
-        <Text style={styles.coverDebugText} numberOfLines={4}>{uri}</Text>
       </View>
     )
   }
@@ -36,10 +35,7 @@ function CoverImage({ uri, title }: { uri: string; title: string }) {
       source={{ uri, headers: IMAGE_HEADERS }}
       style={styles.cover}
       resizeMode="contain"
-      onError={(event) => {
-        console.warn('Detail cover image failed', { title, uri, error: event.nativeEvent.error })
-        setFailed(true)
-      }}
+      onError={() => setFailed(true)}
     />
   )
 }
@@ -184,7 +180,6 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   cover: { width: '100%', height: 300, borderRadius: 12, backgroundColor: '#1e293b', marginBottom: 16 },
   coverPlaceholder: { justifyContent: 'center', alignItems: 'center' },
-  coverDebugText: { color: '#94a3b8', fontSize: 11, textAlign: 'center', paddingHorizontal: 12, marginTop: 8 },
   title: { color: '#fff', fontSize: 24, fontWeight: 'bold', lineHeight: 30 },
   originalTitle: { color: '#94a3b8', fontSize: 16, marginTop: 4 },
   metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 16 },

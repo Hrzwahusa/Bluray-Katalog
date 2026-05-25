@@ -1,0 +1,17 @@
+{
+  "name": "bluray-katalog",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "desktop": "npm run dev --workspace=apps/desktop",
+    "desktop:build": "npm run build --workspace=apps/desktop",
+    "desktop:package": "npm run package --workspace=apps/desktop",
+    "android": "npm run start --workspace=apps/android",
+    "android:build": "npm run build --workspace=apps/android",
+    "install:all": "npm install --legacy-peer-deps"
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+out/
+release/
+.expo/
+*.local
+.env
+.DS_Store
+Thumbs.db
+.idea/
+dist/
+coverage/
+build/
+.gradle/
+local.properties
+*.jks
+*.keystore
+*.log

@@ -4,6 +4,7 @@ release/
 .expo/
 *.local
 .env
+.env.*
 .DS_Store
 Thumbs.db
 .idea/
@@ -15,3 +16,6 @@ local.properties
 *.jks
 *.keystore
 *.log
+*.pem
+*.p12
+.npmrc

@@ -120,7 +120,7 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
                   type="password"
                   value={key}
                   onChange={(e) => setKey(e.target.value)}
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  placeholder="Supabase anon key hier einfügen"
                   className="w-full px-4 py-2.5 bg-slate-700 text-white placeholder-slate-500 rounded-lg border border-slate-600 focus:border-brand-500 focus:outline-none font-mono text-sm"
                 />
                 <p className="text-slate-500 text-xs mt-1">

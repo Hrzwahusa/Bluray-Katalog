@@ -144,8 +144,8 @@ ipcMain.handle('ocr:recognize', async (_, imageBase64: string) => {
 })
 
 // ─── IPC Handler: Wikidata-Suche ────────────────────────────────────
-ipcMain.handle('wikidata:search', async (_, query: string) => {
-  return await searchMovieFuzzy(query)
+ipcMain.handle('wikidata:search', async (_, query: string, language?: string) => {
+  return await searchMovieFuzzy(query, language ?? 'de')
 })
 
 ipcMain.handle('wikidata:details', async (_, title: string, language: string) => {

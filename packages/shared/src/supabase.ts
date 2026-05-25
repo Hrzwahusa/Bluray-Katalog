@@ -55,3 +55,21 @@ export async function deleteMovie(id: string, supabaseUrl: string, supabaseKey: 
   const { error } = await client.from('movies').delete().eq('id', id)
   if (error) throw new Error(`Supabase-Fehler beim Löschen: ${error.message}`)
 }
+
+export async function updateMovie(movie: Movie, supabaseUrl: string, supabaseKey: string): Promise<Movie> {
+  if (!movie.id) throw new Error('Supabase-Fehler beim Aktualisieren: Film-ID fehlt')
+
+  const client = createSupabaseClient(supabaseUrl, supabaseKey)
+  const { data, error } = await client
+    .from('movies')
+    .update({
+      ...movie,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', movie.id)
+    .select()
+    .single()
+
+  if (error) throw new Error(`Supabase-Fehler beim Aktualisieren: ${error.message}`)
+  return data as Movie
+}

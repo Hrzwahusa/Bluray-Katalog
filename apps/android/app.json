@@ -2,7 +2,7 @@
   "expo": {
     "name": "BluRay Katalog",
     "slug": "bluray-katalog",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "bluray-katalog",
@@ -13,7 +13,7 @@
       "backgroundColor": "#1e1b4b"
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1e1b4b"

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { AppSettings } from '../App'
 import type { Movie } from '@shared/types'
-import { getAllMovies, searchMoviesInDb, deleteMovie } from '@shared/supabase'
+import { getAllMovies, deleteMovie, updateMovie } from '@shared/supabase'
 import { MovieCard } from '../components/MovieCard'
 import { MovieDetail } from '../components/MovieDetail'
-import { Search, Camera, Plus } from '../components/Icons'
+import { Search, Camera } from '../components/Icons'
 
 interface LibraryProps {
   settings: AppSettings
@@ -72,12 +72,19 @@ export function Library({ settings, onScanClick }: LibraryProps) {
     setSelectedMovie(null)
   }
 
+  const handleSave = async (movie: Movie) => {
+    const updated = await updateMovie(movie, settings.supabaseUrl, settings.supabaseKey)
+    await loadMovies()
+    setSelectedMovie(updated)
+  }
+
   if (selectedMovie) {
     return (
       <MovieDetail
         movie={selectedMovie}
         onBack={() => setSelectedMovie(null)}
         onDelete={() => selectedMovie.id && handleDelete(selectedMovie.id)}
+        onSave={handleSave}
       />
     )
   }

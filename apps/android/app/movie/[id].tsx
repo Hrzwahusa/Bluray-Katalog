@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -8,10 +8,16 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
-import { getAllMovies, deleteMovie, resolveWikimediaImageUrls } from '@bluray-katalog/shared'
+import {
+  getAllMovies,
+  deleteMovie,
+  resolveWikimediaImageUrls,
+  updateMovie,
+} from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 
 const IMAGE_HEADERS = {
@@ -44,27 +50,89 @@ export default function MovieDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [movie, setMovie] = useState<Movie | null>(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    title: '',
+    original_title: '',
+    year: '',
+    director: '',
+    runtime: '',
+    rating: '',
+    language: '',
+    imdb_id: '',
+    wikidata_id: '',
+    cover_url: '',
+    bluray_photo_url: '',
+    genres: '',
+    cast_members: '',
+    description: '',
+  })
+
+  const setFormFromMovie = (entry: Movie) => {
+    setForm({
+      title: entry.title || '',
+      original_title: entry.original_title || '',
+      year: entry.year?.toString() || '',
+      director: entry.director || '',
+      runtime: entry.runtime?.toString() || '',
+      rating: entry.rating?.toString() || '',
+      language: entry.language || '',
+      imdb_id: entry.imdb_id || '',
+      wikidata_id: entry.wikidata_id || '',
+      cover_url: entry.cover_url || '',
+      bluray_photo_url: entry.bluray_photo_url || '',
+      genres: (entry.genres || []).join(', '),
+      cast_members: (entry.cast_members || []).join(', '),
+      description: entry.description || '',
+    })
+  }
+
+  const loadMovie = useCallback(async () => {
+    const url = await SecureStore.getItemAsync('supabaseUrl')
+    const key =
+      (await SecureStore.getItemAsync('supabaseKey')) ||
+      (await SecureStore.getItemAsync('supabaseAnonKey'))
+    if (!url || !key) {
+      setLoading(false)
+      return
+    }
+
+    const all = await getAllMovies(url, key)
+    const coverUrls = await resolveWikimediaImageUrls(
+      all.map((entry) => entry.cover_url).filter((coverUrl): coverUrl is string => Boolean(coverUrl))
+    )
+    const normalizedMovies = all.map((entry) => ({
+      ...entry,
+      cover_url: entry.cover_url ? (coverUrls.get(entry.cover_url) ?? entry.cover_url) : entry.cover_url,
+    }))
+    const found = normalizedMovies.find((m) => m.id === id) || null
+    setMovie(found)
+    if (found) setFormFromMovie(found)
+    setLoading(false)
+  }, [id])
 
   useEffect(() => {
-    const load = async () => {
-      const url = await SecureStore.getItemAsync('supabaseUrl')
-      const key =
-        (await SecureStore.getItemAsync('supabaseKey')) ||
-        (await SecureStore.getItemAsync('supabaseAnonKey'))
-      if (!url || !key) return
-      const all = await getAllMovies(url, key)
-      const coverUrls = await resolveWikimediaImageUrls(
-        all.map((entry) => entry.cover_url).filter((coverUrl): coverUrl is string => Boolean(coverUrl))
-      )
-      const normalizedMovies = all.map((entry) => ({
-        ...entry,
-        cover_url: entry.cover_url ? (coverUrls.get(entry.cover_url) ?? entry.cover_url) : entry.cover_url,
-      }))
-      setMovie(normalizedMovies.find((m) => m.id === id) || null)
-      setLoading(false)
-    }
-    load()
-  }, [id])
+    loadMovie()
+  }, [loadMovie])
+
+  const parseOptionalNumber = (value: string): number | undefined => {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+    const parsed = Number(trimmed.replace(',', '.'))
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  const parseList = (value: string): string[] | undefined => {
+    const arr = value.split(',').map((entry) => entry.trim()).filter(Boolean)
+    return arr.length ? arr : undefined
+  }
+
+  const toNullable = (value: string): string | undefined => {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
 
   const handleDelete = async () => {
     Alert.alert('Film löschen', `"${movie?.title}" wirklich löschen?`, [
@@ -85,72 +153,199 @@ export default function MovieDetailScreen() {
     ])
   }
 
+  const handleSave = async () => {
+    if (!movie?.id) return
+    if (!form.title.trim()) {
+      setError('Der Titel darf nicht leer sein.')
+      return
+    }
+
+    const url = await SecureStore.getItemAsync('supabaseUrl')
+    const key =
+      (await SecureStore.getItemAsync('supabaseKey')) ||
+      (await SecureStore.getItemAsync('supabaseAnonKey'))
+    if (!url || !key) return
+
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await updateMovie(
+        {
+          ...movie,
+          title: form.title.trim(),
+          original_title: toNullable(form.original_title),
+          year: parseOptionalNumber(form.year),
+          director: toNullable(form.director),
+          runtime: parseOptionalNumber(form.runtime),
+          rating: parseOptionalNumber(form.rating),
+          language: toNullable(form.language),
+          imdb_id: toNullable(form.imdb_id),
+          wikidata_id: toNullable(form.wikidata_id),
+          cover_url: toNullable(form.cover_url),
+          bluray_photo_url: toNullable(form.bluray_photo_url),
+          genres: parseList(form.genres),
+          cast_members: parseList(form.cast_members),
+          description: toNullable(form.description),
+        },
+        url,
+        key
+      )
+
+      const normalized = await resolveWikimediaImageUrls(
+        updated.cover_url ? [updated.cover_url] : []
+      )
+      const hydrated = {
+        ...updated,
+        cover_url: updated.cover_url ? (normalized.get(updated.cover_url) ?? updated.cover_url) : updated.cover_url,
+      }
+      setMovie(hydrated)
+      setFormFromMovie(hydrated)
+      setEditing(false)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) return <View style={styles.center}><ActivityIndicator color="#6366f1" size="large" /></View>
   if (!movie) return <View style={styles.center}><Text style={styles.text}>Film nicht gefunden.</Text></View>
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {error && <Text style={styles.errorText}>{error}</Text>}
+
       {/* Cover */}
-      {movie.cover_url ? (
-        <CoverImage uri={movie.cover_url} title={movie.title} />
+      {(editing ? form.cover_url : movie.cover_url) ? (
+        <CoverImage uri={(editing ? form.cover_url : movie.cover_url) as string} title={movie.title} />
       ) : (
         <View style={[styles.cover, styles.coverPlaceholder]}>
           <Text style={{ fontSize: 48 }}>🎬</Text>
         </View>
       )}
 
-      {/* Titel */}
-      <Text style={styles.title}>{movie.title}</Text>
-      {movie.original_title && movie.original_title !== movie.title && (
-        <Text style={styles.originalTitle}>{movie.original_title}</Text>
-      )}
+      {editing ? (
+        <View style={{ gap: 10 }}>
+          <EditField label="Titel" value={form.title} onChangeText={(value) => setForm((prev) => ({ ...prev, title: value }))} />
+          <EditField label="Originaltitel" value={form.original_title} onChangeText={(value) => setForm((prev) => ({ ...prev, original_title: value }))} />
+          <EditField label="Jahr" value={form.year} onChangeText={(value) => setForm((prev) => ({ ...prev, year: value }))} keyboardType="numeric" />
+          <EditField label="Regie" value={form.director} onChangeText={(value) => setForm((prev) => ({ ...prev, director: value }))} />
+          <EditField label="Laufzeit (Min.)" value={form.runtime} onChangeText={(value) => setForm((prev) => ({ ...prev, runtime: value }))} keyboardType="numeric" />
+          <EditField label="Bewertung" value={form.rating} onChangeText={(value) => setForm((prev) => ({ ...prev, rating: value }))} keyboardType="decimal-pad" />
+          <EditField label="Sprache" value={form.language} onChangeText={(value) => setForm((prev) => ({ ...prev, language: value }))} />
+          <EditField label="IMDb-ID" value={form.imdb_id} onChangeText={(value) => setForm((prev) => ({ ...prev, imdb_id: value }))} />
+          <EditField label="Wikidata-ID" value={form.wikidata_id} onChangeText={(value) => setForm((prev) => ({ ...prev, wikidata_id: value }))} />
+          <EditField label="Cover-URL" value={form.cover_url} onChangeText={(value) => setForm((prev) => ({ ...prev, cover_url: value }))} />
+          <EditField label="Foto-URL (lokal)" value={form.bluray_photo_url} onChangeText={(value) => setForm((prev) => ({ ...prev, bluray_photo_url: value }))} />
+          <EditField label="Genres (kommagetrennt)" value={form.genres} onChangeText={(value) => setForm((prev) => ({ ...prev, genres: value }))} />
+          <EditField label="Darsteller (kommagetrennt)" value={form.cast_members} onChangeText={(value) => setForm((prev) => ({ ...prev, cast_members: value }))} />
+          <EditField label="Beschreibung" value={form.description} onChangeText={(value) => setForm((prev) => ({ ...prev, description: value }))} multiline />
 
-      {/* Metadaten */}
-      <View style={styles.metaGrid}>
-        {movie.year && <MetaItem label="Jahr" value={movie.year.toString()} />}
-        {movie.director && <MetaItem label="Regie" value={movie.director} />}
-        {movie.runtime && <MetaItem label="Laufzeit" value={`${movie.runtime} Min.`} />}
-        {movie.rating && <MetaItem label="Bewertung" value={`${movie.rating}/10`} />}
-      </View>
-
-      {/* Genres */}
-      {movie.genres && movie.genres.length > 0 && (
-        <Section title="Genres">
-          <View style={styles.tagRow}>
-            {movie.genres.map((g) => (
-              <View key={g} style={styles.tag}>
-                <Text style={styles.tagText}>{g}</Text>
-              </View>
-            ))}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+            <TouchableOpacity
+              style={[styles.btn, styles.btnSecondary]}
+              disabled={saving}
+              onPress={() => {
+                setFormFromMovie(movie)
+                setEditing(false)
+                setError(null)
+              }}
+            >
+              <Text style={styles.btnText}>Abbrechen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.btn, styles.btnSave]} disabled={saving} onPress={handleSave}>
+              <Text style={styles.btnText}>{saving ? 'Speichere...' : 'Speichern'}</Text>
+            </TouchableOpacity>
           </View>
-        </Section>
-      )}
+        </View>
+      ) : (
+        <>
+          {/* Titel */}
+          <Text style={styles.title}>{movie.title}</Text>
+          {movie.original_title && movie.original_title !== movie.title && (
+            <Text style={styles.originalTitle}>{movie.original_title}</Text>
+          )}
 
-      {/* Darsteller */}
-      {movie.cast_members && movie.cast_members.length > 0 && (
-        <Section title="Hauptdarsteller">
-          <View style={styles.tagRow}>
-            {movie.cast_members.map((a) => (
-              <View key={a} style={[styles.tag, styles.tagActor]}>
-                <Text style={styles.tagText}>{a}</Text>
-              </View>
-            ))}
+          {/* Metadaten */}
+          <View style={styles.metaGrid}>
+            {movie.year && <MetaItem label="Jahr" value={movie.year.toString()} />}
+            {movie.director && <MetaItem label="Regie" value={movie.director} />}
+            {movie.runtime && <MetaItem label="Laufzeit" value={`${movie.runtime} Min.`} />}
+            {movie.rating && <MetaItem label="Bewertung" value={`${movie.rating}/10`} />}
           </View>
-        </Section>
-      )}
 
-      {/* Beschreibung */}
-      {movie.description && (
-        <Section title="Beschreibung">
-          <Text style={styles.description}>{movie.description}</Text>
-        </Section>
-      )}
+          {/* Genres */}
+          {movie.genres && movie.genres.length > 0 && (
+            <Section title="Genres">
+              <View style={styles.tagRow}>
+                {movie.genres.map((g) => (
+                  <View key={g} style={styles.tag}>
+                    <Text style={styles.tagText}>{g}</Text>
+                  </View>
+                ))}
+              </View>
+            </Section>
+          )}
 
-      {/* Löschen */}
-      <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-        <Text style={styles.deleteBtnText}>🗑 Film löschen</Text>
-      </TouchableOpacity>
+          {/* Darsteller */}
+          {movie.cast_members && movie.cast_members.length > 0 && (
+            <Section title="Hauptdarsteller">
+              <View style={styles.tagRow}>
+                {movie.cast_members.map((a) => (
+                  <View key={a} style={[styles.tag, styles.tagActor]}>
+                    <Text style={styles.tagText}>{a}</Text>
+                  </View>
+                ))}
+              </View>
+            </Section>
+          )}
+
+          {/* Beschreibung */}
+          {movie.description && (
+            <Section title="Beschreibung">
+              <Text style={styles.description}>{movie.description}</Text>
+            </Section>
+          )}
+
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
+            <TouchableOpacity style={[styles.btn, styles.btnEdit]} onPress={() => setEditing(true)}>
+              <Text style={styles.btnText}>Bearbeiten</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.btn, styles.deleteBtn]} onPress={handleDelete}>
+              <Text style={styles.deleteBtnText}>🗑 Film löschen</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </ScrollView>
+  )
+}
+
+function EditField({
+  label,
+  value,
+  onChangeText,
+  multiline = false,
+  keyboardType = 'default',
+}: {
+  label: string
+  value: string
+  onChangeText: (value: string) => void
+  multiline?: boolean
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad'
+}) {
+  return (
+    <View>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        multiline={multiline}
+        keyboardType={keyboardType}
+        style={[styles.input, multiline && styles.inputMultiline]}
+        placeholderTextColor="#64748b"
+      />
+    </View>
   )
 }
 
@@ -178,10 +373,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
   content: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorText: { color: '#fca5a5', backgroundColor: '#450a0a', borderColor: '#7f1d1d', borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
   cover: { width: '100%', height: 300, borderRadius: 12, backgroundColor: '#1e293b', marginBottom: 16 },
   coverPlaceholder: { justifyContent: 'center', alignItems: 'center' },
   title: { color: '#fff', fontSize: 24, fontWeight: 'bold', lineHeight: 30 },
   originalTitle: { color: '#94a3b8', fontSize: 16, marginTop: 4 },
+  fieldLabel: { color: '#64748b', fontSize: 12, marginBottom: 4 },
+  input: {
+    backgroundColor: '#1e293b',
+    color: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+    fontSize: 14,
+  },
+  inputMultiline: { minHeight: 96, textAlignVertical: 'top' },
   metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 16 },
   metaItem: { minWidth: '45%' },
   metaLabel: { color: '#64748b', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -191,12 +399,18 @@ const styles = StyleSheet.create({
   tagActor: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
   tagText: { color: '#a5b4fc', fontSize: 13 },
   description: { color: '#cbd5e1', lineHeight: 22, fontSize: 14 },
-  deleteBtn: {
-    marginTop: 32,
-    backgroundColor: '#450a0a',
-    padding: 14,
+  btn: {
+    flex: 1,
+    padding: 12,
     borderRadius: 10,
     alignItems: 'center',
+  },
+  btnSecondary: { backgroundColor: '#334155' },
+  btnSave: { backgroundColor: '#15803d' },
+  btnEdit: { backgroundColor: '#4338ca' },
+  btnText: { color: '#fff', fontWeight: '600' },
+  deleteBtn: {
+    backgroundColor: '#450a0a',
     borderWidth: 1,
     borderColor: '#7f1d1d',
   },

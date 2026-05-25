@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   recognizeText: (imageBase64: string) => ipcRenderer.invoke('ocr:recognize', imageBase64),
 
   // Wikidata-Suche (läuft im Main-Prozess, kein CORS-Problem)
-  searchMovies: (query: string) => ipcRenderer.invoke('wikidata:search', query),
+  searchMovies: (query: string, language?: string) => ipcRenderer.invoke('wikidata:search', query, language),
   getWikipediaDetails: (title: string, language: string) =>
     ipcRenderer.invoke('wikidata:details', title, language),
   searchMoviePoster: (title: string, year?: number, originalTitle?: string) =>

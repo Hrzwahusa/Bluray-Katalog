@@ -6,7 +6,24 @@ const WIKIPEDIA_REST = 'https://en.wikipedia.org/api/rest_v1/page/summary'
 /** Fetch mit automatischem Retry bei 429 (Rate Limit). */
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, options)
+    const controller = new AbortController()
+    const timeoutMs = 12000
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+    let res: Response
+    try {
+      res = await fetch(url, { ...options, signal: controller.signal })
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500))
+        continue
+      }
+      const message = error instanceof Error ? error.message : 'Unbekannter Netzwerkfehler'
+      throw new Error(`Netzwerkfehler bei Wikidata: ${message}`)
+    }
+    clearTimeout(timeoutId)
+
     if (res.status === 429 && attempt < maxRetries) {
       const retryAfter = parseInt(res.headers.get('Retry-After') ?? '0')
       const waitMs = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt) * 2000
@@ -225,24 +242,27 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
  * 3. Filter nach "poster" im Dateinamen → imageinfo → URL
  */
 export async function searchMoviePoster(title: string, year?: number, originalTitle?: string): Promise<string | undefined> {
-  const BASE = 'https://en.wikipedia.org/w/api.php'
+  const BASES = ['https://en.wikipedia.org/w/api.php', 'https://de.wikipedia.org/w/api.php']
   const UA = { 'User-Agent': 'BluRay-Katalog/1.0' }
 
   // Englischen Originaltitel zuerst, dann lokalisierten Titel
   const titlesToTry = [...new Set([originalTitle, title].filter(Boolean) as string[])]
 
-  for (const searchTitle of titlesToTry) {
-    // Mehrere Suchabfragen versuchen: mit Jahr, ohne Jahr, nur Titel
-    const queries = year
-      ? [`${searchTitle} ${year} film`, `${searchTitle} film`, searchTitle]
-      : [`${searchTitle} film`, searchTitle]
+  for (const base of BASES) {
+    for (const searchTitle of titlesToTry) {
+      // Jahr-unabhaengig priorisieren: falsche Jahreszahlen sollen Treffer nicht blockieren.
+      // Das Jahr wird nur als spaete Zusatzvariante verwendet.
+      const queries = year
+        ? [`${searchTitle} film`, searchTitle, `${searchTitle} ${year} film`]
+        : [`${searchTitle} film`, searchTitle]
 
-    for (const searchTerm of queries) {
-      try {
-        const result = await _searchPosterWithTerm(searchTerm, BASE, UA)
-        if (result) return result
-      } catch {
-        // nächste Variante versuchen
+      for (const searchTerm of queries) {
+        try {
+          const result = await _searchPosterWithTerm(searchTerm, base, UA)
+          if (result) return result
+        } catch {
+          // naechste Variante versuchen
+        }
       }
     }
   }
@@ -256,43 +276,106 @@ async function _searchPosterWithTerm(
 ): Promise<string | undefined> {
   // ── Schritt 1: exakten Wikipedia-Seitentitel finden ───────────────
   const s1 = new URLSearchParams({ action: 'opensearch', search: searchTerm, limit: '5', namespace: '0', format: 'json', origin: '*' })
-  const r1 = await fetch(`${BASE}?${s1}`, { headers: UA })
+  const r1 = await fetchWithRetry(`${BASE}?${s1}`, { headers: UA }, 2)
   if (!r1.ok) return undefined
-  const [, titles] = (await r1.json()) as [string, string[]]
+  let opensearchData: [string, string[]]
+  try {
+    opensearchData = (await r1.json()) as [string, string[]]
+  } catch {
+    return undefined
+  }
+  const [, titles] = opensearchData
   if (!titles.length) return undefined
 
-  // ── Schritt 2: alle Bilder auf der Seite auflisten ────────────────
-  const pageTitle = titles[0]
-  const s2 = new URLSearchParams({ action: 'query', titles: pageTitle, prop: 'images', imlimit: '30', format: 'json', origin: '*' })
-  const r2 = await fetch(`${BASE}?${s2}`, { headers: UA })
-  if (!r2.ok) return undefined
-  const d2 = await r2.json()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const page0 = Object.values(d2.query?.pages ?? {})[0] as any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const allImages: string[] = (page0?.images ?? []).map((img: any) => img.title as string)
+  // Mehrere Seitentitel pruefen, da OpenSearch oft zuerst Franchise-/Begriffsseiten liefert.
+  const pageCandidates = titles.slice(0, 5)
 
-  // ── Schritt 3: nach "poster" filtern, sonst erstes JPG/PNG ────────
-  const isImage = (n: string) => /\.(jpe?g|png)$/i.test(n)
-  const isExcluded = (n: string) => /icon|logo|flag|signature|map|photo|cast|crew/i.test(n)
-  const posterFiles = allImages.filter(n => /poster/i.test(n) && isImage(n) && !isExcluded(n))
-  const fallbackFiles = allImages.filter(n => isImage(n) && !isExcluded(n))
-  const candidates = (posterFiles.length ? posterFiles : fallbackFiles).slice(0, 3)
-  if (!candidates.length) return undefined
+  for (const pageTitle of pageCandidates) {
+    // ── Schritt 2a: REST-Summary (liefert oft direkt das passende Poster) ──
+    const restBase = BASE.replace('/w/api.php', '/api/rest_v1/page/summary')
+    const restUrl = `${restBase}/${encodeURIComponent(pageTitle)}`
+    const restRes = await fetchWithRetry(restUrl, { headers: UA }, 2)
+    if (restRes.ok) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const restData = await restRes.json() as any
+        const restThumb = restData?.thumbnail?.source || restData?.originalimage?.source
+        if (typeof restThumb === 'string' && restThumb && !restThumb.toLowerCase().endsWith('.svg')) {
+          return restThumb
+        }
+      } catch {
+        // Fallback auf weitere Strategien.
+      }
+    }
 
-  // ── Schritt 4: Bild-URL per imageinfo holen ───────────────────────
-  const s3 = new URLSearchParams({ action: 'query', titles: candidates.join('|'), prop: 'imageinfo', iiprop: 'url|mime', iiurlwidth: '500', format: 'json', origin: '*' })
-  const r3 = await fetch(`${BASE}?${s3}`, { headers: UA })
-  if (!r3.ok) return undefined
-  const d3 = await r3.json()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const infoPages = Object.values(d3.query?.pages ?? {}) as any[]
-  for (const p of infoPages) {
-    const info = p.imageinfo?.[0]
-    if (!info) continue
-    const mime: string = info.mime ?? ''
-    if (!mime.startsWith('image/') || mime === 'image/svg+xml') continue
-    return info.thumburl ?? info.url
+    // ── Schritt 2a: Infobox-/Seitenbild direkt holen (zuverlaessiger als prop=images) ──
+    const sPageImage = new URLSearchParams({
+      action: 'query',
+      titles: pageTitle,
+      prop: 'pageimages',
+      piprop: 'thumbnail|name',
+      pithumbsize: '500',
+      format: 'json',
+      origin: '*',
+    })
+    const rPageImage = await fetchWithRetry(`${BASE}?${sPageImage}`, { headers: UA }, 2)
+    if (rPageImage.ok) {
+      try {
+        const dPageImage = await rPageImage.json()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const page = Object.values(dPageImage.query?.pages ?? {})[0] as any
+        const thumbnailUrl: string | undefined = page?.thumbnail?.source
+        const mimeCandidate = thumbnailUrl?.toLowerCase() ?? ''
+        if (thumbnailUrl && !mimeCandidate.endsWith('.svg')) {
+          return thumbnailUrl
+        }
+      } catch {
+        // Wenn die API kein JSON liefert (Rate-Limit/HTML), auf Fallback weitergehen.
+      }
+    }
+
+    // ── Schritt 2: alle Bilder auf der Seite auflisten ────────────────
+    const s2 = new URLSearchParams({ action: 'query', titles: pageTitle, prop: 'images', imlimit: '30', format: 'json', origin: '*' })
+    const r2 = await fetchWithRetry(`${BASE}?${s2}`, { headers: UA }, 2)
+    if (!r2.ok) continue
+    let d2: any
+    try {
+      d2 = await r2.json()
+    } catch {
+      continue
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const page0 = Object.values(d2.query?.pages ?? {})[0] as any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allImages: string[] = (page0?.images ?? []).map((img: any) => img.title as string)
+
+    // ── Schritt 3: nach "poster" filtern, sonst erstes JPG/PNG ────────
+    const isImage = (n: string) => /\.(jpe?g|png)$/i.test(n)
+    const isExcluded = (n: string) => /icon|logo|flag|signature|map|photo|cast|crew/i.test(n)
+    const posterFiles = allImages.filter(n => /poster/i.test(n) && isImage(n) && !isExcluded(n))
+    const fallbackFiles = allImages.filter(n => isImage(n) && !isExcluded(n))
+    const candidates = (posterFiles.length ? posterFiles : fallbackFiles).slice(0, 3)
+    if (!candidates.length) continue
+
+    // ── Schritt 4: Bild-URL per imageinfo holen ───────────────────────
+    const s3 = new URLSearchParams({ action: 'query', titles: candidates.join('|'), prop: 'imageinfo', iiprop: 'url|mime', iiurlwidth: '500', format: 'json', origin: '*' })
+    const r3 = await fetchWithRetry(`${BASE}?${s3}`, { headers: UA }, 2)
+    if (!r3.ok) continue
+    let d3: any
+    try {
+      d3 = await r3.json()
+    } catch {
+      continue
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const infoPages = Object.values(d3.query?.pages ?? {}) as any[]
+    for (const p of infoPages) {
+      const info = p.imageinfo?.[0]
+      if (!info) continue
+      const mime: string = info.mime ?? ''
+      if (!mime.startsWith('image/') || mime === 'image/svg+xml') continue
+      return info.thumburl ?? info.url
+    }
   }
   return undefined
 }

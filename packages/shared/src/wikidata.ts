@@ -569,6 +569,11 @@ function applyTitleAliases(value: string): string[] {
     variants.add(value.replace(/dark kingdom/gi, 'Dark World'))
   }
 
+  if (lower.includes('säulen der erde') || lower.includes('saulen der erde')) {
+    variants.add('Die Säulen der Erde')
+    variants.add('The Pillars of the Earth')
+  }
+
   return Array.from(variants)
 }
 
@@ -623,7 +628,7 @@ function scoreMovieMatch(movie: WikidataMovie, queryNorm: string, queryTokens: s
   if (descriptionNorm.includes('film')) score += 10
   if (descriptionNorm.includes('movie')) score += 8
 
-  if (/tv series|fernsehserie|episode|character|comic|album|soundtrack|disambiguation/.test(descriptionNorm)) {
+  if (/episode|character|comic|album|soundtrack|disambiguation/.test(descriptionNorm)) {
     score -= 120
   }
 
@@ -644,7 +649,7 @@ function isLikelyMovieEntity(
     return false
   }
 
-  const hasMovieKeywords = /\bfilm\b|\bmovie\b|kinofilm|spielfilm/.test(desc)
+  const hasScreenMediaKeywords = /\bfilm\b|\bmovie\b|kinofilm|spielfilm|fernsehfilm|tv film|television film|fernsehserie|tv serie|television series|miniserie|miniseries/.test(desc)
   const hasReleaseDate = Array.isArray(claims.P577) && claims.P577.length > 0
   const hasImdbId = Array.isArray(claims.P345) && claims.P345.length > 0
   const hasMovieMetadata = hasReleaseDate || hasImdbId
@@ -652,8 +657,8 @@ function isLikelyMovieEntity(
   if (instanceOf.some((id) => filmTypeQids.has(id))) return true
 
   // Ohne P31 nur behalten, wenn die Entitaet dennoch klar wie ein Film aussieht.
-  if (instanceOf.length === 0) return hasMovieKeywords && hasMovieMetadata
+  if (instanceOf.length === 0) return hasScreenMediaKeywords && hasMovieMetadata
 
-  // Fallback fuer Film-Untertypen, die nicht direkt in filmTypeQids stehen.
-  return hasMovieKeywords && hasMovieMetadata
+  // Fallback fuer Film-/Serien-Untertypen, die nicht direkt in filmTypeQids stehen.
+  return hasScreenMediaKeywords && hasMovieMetadata
 }

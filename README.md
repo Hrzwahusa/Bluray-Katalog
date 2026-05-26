@@ -104,11 +104,58 @@ cd apps/android
 eas build --platform android
 ```
 
+Lokaler Release-Build (ohne EAS Queue, Windows):
+
+```bash
+npm run android:build:production:local
+```
+
+Das erzeugte AAB liegt danach unter:
+
+```text
+apps/android/android/app/build/outputs/bundle/release/app-release.aab
+```
+
 ## Releases
 
 - Desktop-Pakete lassen sich mit `npm run desktop:package` erzeugen.
 - Android-Builds lassen sich mit EAS über `eas build --platform android` erzeugen.
 - Für GitHub Releases empfiehlt sich, die erzeugten Desktop-Artefakte oder Android-Builds erst nach einem verifizierten Tag hochzuladen und nicht im Repository selbst zu versionieren.
+
+### Google Play (Android)
+
+Vorbereitung (einmalig):
+
+1. In der Google Play Console eine App mit dem Paketnamen `com.bluraykatalog` anlegen.
+2. In Google Cloud ein Service-Konto erstellen und als JSON-Key herunterladen.
+3. Das Service-Konto in der Play Console unter API-Zugriff mit dem Projekt verknüpfen.
+4. Dem Service-Konto mindestens Rechte auf Release-Management (z. B. „Release Manager“) geben.
+
+Build + Upload (Internal Testing):
+
+```bash
+cd apps/android
+eas login
+eas build --platform android --profile production
+eas submit --platform android --profile production --key C:/ABSOLUTER/PFAD/google-play-service-account.json
+```
+
+Hinweise:
+
+- Das Profil `production` in `apps/android/eas.json` ist auf den Play-Track `internal` konfiguriert.
+- Da ein natives `apps/android/android`-Projekt vorhanden ist, kommen Paketname und Versionscode aus `apps/android/android/app/build.gradle`.
+- Vor jedem neuen Upload `versionCode` in `apps/android/android/app/build.gradle` erhoehen.
+- Fuer lokale Release-Builds mit Gradle wird eine eigene Signatur benoetigt:
+	- Keystore einmalig erzeugen (im Ordner `apps/android/android`):
+		- `keytool -genkeypair -v -keystore release-keystore.jks -alias release -keyalg RSA -keysize 2048 -validity 10000`
+  - `apps/android/android/keystore.properties.example` nach `apps/android/android/keystore.properties` kopieren
+  - Werte fuer `storeFile`, `storePassword`, `keyAlias`, `keyPassword` setzen
+  - Keystore und `keystore.properties` nicht ins Repository committen
+- Komfort-Skripte:
+	- `npm run build:production`
+	- `npm run build:production:local`
+	- `npm run submit:production`
+	- `npm run release:internal`
 
 ## Technologie-Stack
 
@@ -142,6 +189,15 @@ Die zentrale Tabelle `movies` wird über [supabase/schema.sql](supabase/schema.s
 
 - Zugangsdaten werden lokal in den jeweiligen Apps gespeichert und nicht im Repository verwaltet.
 - Build-Artefakte, lokale SDK-Pfade und Abhängigkeiten sollten nicht versioniert werden.
+
+## Privacy Policy (Google Play)
+
+- Vorlage im Repository: `privacy-policy.html`
+- Du brauchst fuer Google Play eine oeffentlich erreichbare HTTPS-URL.
+- Schnellster Weg ohne eigene Website:
+	1. Datei `privacy-policy.html` in Google Docs kopieren.
+	2. Unter Datei > Teilen > Im Web veroeffentlichen.
+	3. Die veroeffentlichte URL in der Play Console hinterlegen.
 
 ## Lizenz
 

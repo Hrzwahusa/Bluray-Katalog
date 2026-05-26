@@ -6,7 +6,11 @@
   "scripts": {
     "start": "npx expo start",
     "android": "npx expo run:android",
-    "build": "eas build --platform android",
+    "build": "npx eas-cli build --platform android",
+    "build:production": "npx eas-cli build --platform android --profile production",
+    "build:production:local": "cd android && gradlew.bat bundleRelease",
+    "submit:production": "npx eas-cli submit --platform android --profile production",
+    "release:internal": "npm run build:production && npm run submit:production",
     "ios": "expo run:ios"
   },
   "dependencies": {

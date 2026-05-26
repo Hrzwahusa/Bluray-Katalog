@@ -9,6 +9,88 @@ import { searchMovieFuzzy, getWikipediaDetails, searchMoviePoster } from '@share
 const Store = (ElectronStore as any).default || ElectronStore
 const store = new Store<{ supabaseUrl: string; supabaseKey: string }>()
 
+type GeminiMovieGuess = {
+  title?: string
+  originalTitle?: string
+  year?: number
+  director?: string
+  genres?: string[]
+  cast?: string[]
+  runtime?: number
+  imdbId?: string
+  description?: string
+  coverImageUrl?: string
+  posterHints?: string[]
+}
+
+function cleanString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+function cleanNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value)
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.').trim())
+    if (Number.isFinite(parsed)) return Math.round(parsed)
+  }
+  return undefined
+}
+
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => cleanString(entry))
+    .filter((entry): entry is string => Boolean(entry))
+}
+
+function parseGeminiMovieGuess(raw: string): GeminiMovieGuess | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  const jsonCandidate = trimmed
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/, '')
+    .trim()
+
+  try {
+    const parsed = JSON.parse(jsonCandidate) as Record<string, unknown>
+    const guess: GeminiMovieGuess = {
+      title: cleanString(parsed.title),
+      originalTitle: cleanString(parsed.originalTitle),
+      year: cleanNumber(parsed.year),
+      director: cleanString(parsed.director),
+      genres: cleanStringArray(parsed.genres),
+      cast: cleanStringArray(parsed.cast),
+      runtime: cleanNumber(parsed.runtime),
+      imdbId: cleanString(parsed.imdbId),
+      description: cleanString(parsed.description),
+      coverImageUrl: cleanString(parsed.coverImageUrl),
+      posterHints: cleanStringArray(parsed.posterHints),
+    }
+
+    if (!guess.title) return null
+    return guess
+  } catch {
+    const plainTitle = trimmed.replace(/^["']|["']$/g, '')
+    return plainTitle ? { title: plainTitle } : null
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  try {
+    const timeoutPromise = new Promise<T>((resolve) => {
+      timeoutId = setTimeout(() => resolve(fallback), timeoutMs)
+    })
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -108,17 +190,22 @@ ipcMain.handle('ocr:recognize', async (_, imageBase64: string) => {
               { inlineData: { data: base64Data, mimeType } },
               {
                 text:
-                  'This is a photo of a Blu-ray or DVD movie cover. What is the exact movie title shown on the cover? ' +
-                  'Return ONLY the movie title, nothing else. No explanations, no quotes, no punctuation at the end. ' +
-                  'If you cannot determine a title, return an empty string.',
+                  'You are analyzing a Blu-ray or DVD movie cover photo. Return STRICT JSON only (no markdown, no commentary) with this shape: ' +
+                  '{"title":"","originalTitle":"","year":null,"director":"","genres":[],"cast":[],"runtime":null,"imdbId":"","description":"","coverImageUrl":"","posterHints":[]}. ' +
+                  'Rules: 1) title must be the main movie title from the cover. 2) Use null for unknown numbers and empty strings/arrays for unknown text fields. ' +
+                  '3) Keep genres and cast short and relevant. 4) coverImageUrl may be empty and should only be set when a direct likely poster image URL is visible on the cover/source context. 5) posterHints should contain short alternate search titles (e.g., subtitle, translated title variant) when useful. 6) Do not invent highly specific facts; leave fields empty if uncertain.',
               },
             ],
           },
         ],
       })
-      const text = (result.text ?? '').trim().replace(/^["']|["']$/g, '')
+      const rawText = (result.text ?? '').trim()
+      const guess = parseGeminiMovieGuess(rawText)
+      const text = guess?.title ?? ''
       console.log('[Gemini] Ergebnis:', text)
-      return { text, confidence: 95 }
+      console.log('[Gemini] Cover-Vorschlag:', guess?.coverImageUrl ?? 'keiner')
+      console.log('[Gemini] Poster-Hints:', (guess?.posterHints ?? []).join(' | ') || 'keine')
+      return { text, confidence: 95, movieGuess: guess }
     } catch (e) {
       const err = e as Error
       console.error('[Gemini] Fehler:', err.name, err.message)
@@ -155,7 +242,14 @@ ipcMain.handle('wikidata:details', async (_, title: string, language: string) =>
 ipcMain.handle('wikidata:poster', async (_, title: string, year?: number, originalTitle?: string) => {
   const label = originalTitle && originalTitle !== title ? `${originalTitle} / ${title}` : title
   console.log('[Poster] Suche Poster für:', label, year)
-  const url = await searchMoviePoster(title, year, originalTitle)
+  const url = await withTimeout(
+    searchMoviePoster(title, year, originalTitle),
+    30000,
+    undefined
+  )
+  if (!url) {
+    console.warn('[Poster] Timeout/kein Ergebnis innerhalb 30s')
+  }
   console.log('[Poster] Ergebnis:', url ?? 'keines gefunden')
   return url
 })

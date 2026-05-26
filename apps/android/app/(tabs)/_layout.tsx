@@ -2,8 +2,11 @@ import React from 'react'
 import { Tabs, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Pressable } from 'react-native'
+import { useI18n } from '../../lib/i18n'
 
 export default function TabLayout() {
+  const { t } = useI18n()
+
   return (
     <Tabs
       screenOptions={{
@@ -26,7 +29,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Bibliothek',
+          title: t('tab.library'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="film-outline" size={size} color={color} />
           ),
@@ -35,7 +38,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="scan"
         options={{
-          title: 'Scannen',
+          title: t('tab.scan'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="camera-outline" size={size} color={color} />
           ),

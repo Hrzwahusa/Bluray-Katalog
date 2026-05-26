@@ -17,6 +17,7 @@ import { router } from 'expo-router'
 import { searchMovieFuzzy, getWikipediaDetails, searchMoviePoster } from '@bluray-katalog/shared'
 import { saveMovie } from '@bluray-katalog/shared'
 import type { WikidataMovie } from '@bluray-katalog/shared'
+import { useI18n } from '../../lib/i18n'
 
 const IMAGE_HEADERS = {
   'User-Agent': 'BluRay-Katalog/1.0',
@@ -25,7 +26,111 @@ const IMAGE_HEADERS = {
 
 type Step = 'camera' | 'processing' | 'search' | 'confirm' | 'saving' | 'done'
 
+type GeminiMovieGuess = {
+  title?: string
+  originalTitle?: string
+  year?: number
+  director?: string
+  genres?: string[]
+  cast?: string[]
+  runtime?: number
+  imdbId?: string
+  description?: string
+}
+
+function cleanString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function cleanNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value)
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.').trim())
+    if (Number.isFinite(parsed)) return Math.round(parsed)
+  }
+  return undefined
+}
+
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => cleanString(entry))
+    .filter((entry): entry is string => Boolean(entry))
+}
+
+function parseGeminiMovieGuess(raw: string): GeminiMovieGuess | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  const jsonCandidate = trimmed
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/, '')
+    .trim()
+
+  try {
+    const parsed = JSON.parse(jsonCandidate) as Record<string, unknown>
+    const guess: GeminiMovieGuess = {
+      title: cleanString(parsed.title),
+      originalTitle: cleanString(parsed.originalTitle),
+      year: cleanNumber(parsed.year),
+      director: cleanString(parsed.director),
+      genres: cleanStringArray(parsed.genres),
+      cast: cleanStringArray(parsed.cast),
+      runtime: cleanNumber(parsed.runtime),
+      imdbId: cleanString(parsed.imdbId),
+      description: cleanString(parsed.description),
+    }
+
+    if (!guess.title) return null
+    return guess
+  } catch {
+    const plainTitle = trimmed.replace(/^"|"$/g, '')
+    return plainTitle ? { title: plainTitle } : null
+  }
+}
+
+function buildGeminiFallbackCandidate(guess: GeminiMovieGuess): WikidataMovie | null {
+  if (!guess.title) return null
+
+  return {
+    wikidataId: `gemini:${guess.title.toLowerCase().replace(/\s+/g, '-')}`,
+    title: guess.title,
+    originalTitle: guess.originalTitle,
+    year: guess.year,
+    genres: guess.genres ?? [],
+    cast: guess.cast ?? [],
+    director: guess.director,
+    description: guess.description,
+    imdbId: guess.imdbId,
+    runtime: guess.runtime,
+  }
+}
+
+function isSvgDerivedImageUrl(url?: string): boolean {
+  if (!url) return false
+  const normalized = url.toLowerCase()
+  return normalized.endsWith('.svg') || normalized.includes('.svg?') || normalized.includes('.svg.')
+}
+
+function isLikelyPosterImageUrl(url?: string): boolean {
+  if (!url) return false
+  const normalized = url.toLowerCase()
+  if (isSvgDerivedImageUrl(normalized)) return false
+  if (normalized.includes('/wikipedia/en/')) return true
+  return /poster|cover|blu[-_ ]?ray|dvd/.test(normalized)
+}
+
+function shouldSearchPoster(coverUrl?: string): boolean {
+  if (!coverUrl) return true
+  return !isLikelyPosterImageUrl(coverUrl)
+}
+
 export default function ScanScreen() {
+  const { t } = useI18n()
+
   const [permission, requestPermission] = useCameraPermissions()
   const cameraRef = useRef<CameraView>(null)
 
@@ -48,10 +153,10 @@ export default function ScanScreen() {
       setStep('processing')
       await runGeminiOcr(photo.base64 ?? null, photo.uri)
     } catch (e) {
-      setError(`Kamerafehler: ${(e as Error).message}`)
+      setError(t('scan.cameraError', { message: (e as Error).message }))
       setStep('search')
     }
-  }, [])
+  }, [t])
 
   // ── Galerie auswählen ───────────────────────────────────────────────
   const pickFromGallery = useCallback(async () => {
@@ -67,11 +172,12 @@ export default function ScanScreen() {
     await runGeminiOcr(asset.base64 ?? null, asset.uri)
   }, [])
 
-  // ── Gemini API Titelerkennung ─────────────────────────────────────────
+  // ── Gemini API Titel- und Metadaten-Erkennung ─────────────────────────
   const runGeminiOcr = async (base64: string | null, uri: string) => {
     try {
-      setStatus('Titelerkennung läuft...')
+      setStatus(t('scan.ocrRunning'))
       const geminiKey = await SecureStore.getItemAsync('geminiKey')
+      let guess: GeminiMovieGuess | null = null
       let title = ''
 
       if (geminiKey && base64) {
@@ -84,22 +190,28 @@ export default function ScanScreen() {
               contents: [{
                 parts: [
                   { inline_data: { mime_type: 'image/jpeg', data: base64 } },
-                  { text: 'This is a photo of a Blu-ray or DVD movie cover. What is the exact movie title shown on the cover? Return ONLY the movie title, nothing else. No explanations, no quotes, no punctuation at the end. If you cannot determine a title, return an empty string.' },
+                  {
+                    text: 'You are analyzing a Blu-ray or DVD movie cover photo. Return STRICT JSON only (no markdown, no commentary) with this shape: {"title":"","originalTitle":"","year":null,"director":"","genres":[],"cast":[],"runtime":null,"imdbId":"","description":""}. Rules: 1) title must be the main movie title from the cover. 2) Use null for unknown numbers and empty strings/arrays for unknown text fields. 3) Keep genres and cast short and relevant. 4) Do not invent highly specific facts; leave fields empty if uncertain.',
+                  },
                 ],
               }],
             }),
           }
         )
         const json = await resp.json()
-        title = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim().replace(/^["']|["']$/g, '')
+        const rawText = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
+        guess = parseGeminiMovieGuess(rawText)
+        title = guess?.title ?? ''
       }
 
       setOcrText(title)
       setSearchQuery(title)
       setStep('search')
-      if (title) await doSearch(title)
+      if (title) {
+        await doSearch(title, guess)
+      }
     } catch (e) {
-      setError(`Erkennungsfehler: ${(e as Error).message}`)
+      setError(t('scan.ocrError', { message: (e as Error).message }))
       setStep('search')
     } finally {
       setStatus('')
@@ -107,17 +219,27 @@ export default function ScanScreen() {
   }
 
   // ── Wikidata-Suche ──────────────────────────────────────────────────
-  const doSearch = async (query: string) => {
+  const doSearch = async (query: string, geminiGuess?: GeminiMovieGuess | null) => {
     if (!query.trim()) return
     try {
-      setStatus('Suche in Wikidata...')
+      setStatus(t('scan.searchRunning'))
       setError(null)
       setCandidates([])
       const results = await searchMovieFuzzy(query.trim())
-      setCandidates(results)
-      if (results.length === 0) setError('Keine Filme gefunden.')
+      if (results.length > 0) {
+        setCandidates(results)
+        return
+      }
+
+      const fallback = geminiGuess ? buildGeminiFallbackCandidate(geminiGuess) : null
+      if (fallback) {
+        setCandidates([fallback])
+        return
+      }
+
+      setError(t('scan.searchNoneFound'))
     } catch (e) {
-      setError(`Suchfehler: ${(e as Error).message}`)
+      setError(t('scan.searchError', { message: (e as Error).message }))
     } finally {
       setStatus('')
     }
@@ -133,32 +255,48 @@ export default function ScanScreen() {
     setStep('search')
   }, [])
 
+  const backToCamera = useCallback(() => {
+    setCapturedUri(null)
+    setOcrText('')
+    setSearchQuery('')
+    setCandidates([])
+    setSelectedMovie(null)
+    setError(null)
+    setStatus('')
+    setStep('camera')
+  }, [])
+
   // ── Speichern ───────────────────────────────────────────────────────
   const saveSelectedMovie = async () => {
     if (!selectedMovie) return
     setStep('saving')
     try {
+      const isGeminiFallback = selectedMovie.wikidataId.startsWith('gemini:')
+
       const supabaseUrl = await SecureStore.getItemAsync('supabaseUrl')
       const supabaseKey =
         (await SecureStore.getItemAsync('supabaseKey')) ||
         (await SecureStore.getItemAsync('supabaseAnonKey'))
       if (!supabaseUrl || !supabaseKey) {
-        Alert.alert('Fehler', 'Bitte Supabase-Zugangsdaten in den Einstellungen hinterlegen.')
+        Alert.alert(t('alert.error'), t('scan.missingSupabase'))
         setStep('confirm')
         return
       }
 
-      setStatus('Hole Wikipedia-Details...')
+      setStatus(t('scan.fetchWiki'))
       const wikiDetails = await getWikipediaDetails(selectedMovie.title, 'de')
 
-      setStatus('Suche Film-Poster...')
-      const posterUrl = await searchMoviePoster(
-        selectedMovie.title,
-        selectedMovie.year,
-        selectedMovie.originalTitle
-      )
+      let posterUrl: string | undefined
+      if (shouldSearchPoster(selectedMovie.coverUrl)) {
+        setStatus(t('scan.searchPoster'))
+        posterUrl = await searchMoviePoster(
+          selectedMovie.title,
+          selectedMovie.year,
+          selectedMovie.originalTitle
+        )
+      }
 
-      setStatus('Speichere...')
+      setStatus(t('scan.saving'))
       await saveMovie(
         {
           title: selectedMovie.title,
@@ -168,8 +306,8 @@ export default function ScanScreen() {
           cast_members: selectedMovie.cast,
           director: selectedMovie.director,
           description: selectedMovie.description || wikiDetails.description,
-          cover_url: posterUrl || selectedMovie.coverUrl || undefined,
-          wikidata_id: selectedMovie.wikidataId,
+          cover_url: selectedMovie.coverUrl || posterUrl || undefined,
+          wikidata_id: isGeminiFallback ? undefined : selectedMovie.wikidataId,
           imdb_id: selectedMovie.imdbId,
           runtime: selectedMovie.runtime,
         },
@@ -178,7 +316,7 @@ export default function ScanScreen() {
       )
       setStep('done')
     } catch (e) {
-      setError(`Fehler: ${(e as Error).message}`)
+      setError(t('scan.saveError', { message: (e as Error).message }))
       setStep('confirm')
     } finally {
       setStatus('')
@@ -201,15 +339,15 @@ export default function ScanScreen() {
     if (!permission?.granted) {
       return (
         <View style={styles.center}>
-          <Text style={styles.text}>Kamera-Berechtigung erforderlich</Text>
+          <Text style={styles.text}>{t('scan.permissionRequired')}</Text>
           <TouchableOpacity style={styles.btn} onPress={requestPermission}>
-            <Text style={styles.btnText}>Berechtigung erteilen</Text>
+            <Text style={styles.btnText}>{t('scan.grantPermission')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={pickFromGallery}>
-            <Text style={styles.btnText}>Aus Galerie wählen</Text>
+            <Text style={styles.btnText}>{t('scan.pickGallery')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={startManualTitleSearch}>
-            <Text style={styles.btnText}>Titel manuell eingeben</Text>
+            <Text style={styles.btnText}>{t('scan.enterTitleManually')}</Text>
           </TouchableOpacity>
         </View>
       )
@@ -221,16 +359,16 @@ export default function ScanScreen() {
           {/* Rahmen-Hilfe */}
           <View style={styles.overlay}>
             <View style={styles.frame} />
-            <Text style={styles.hint}>Blu-ray Cover im Rahmen positionieren</Text>
+            <Text style={styles.hint}>{t('scan.frameHint')}</Text>
           </View>
         </CameraView>
         <View style={styles.cameraControls}>
           <TouchableOpacity style={styles.galleryBtn} onPress={pickFromGallery}>
-            <Text style={styles.galleryBtnText}>📁 Galerie</Text>
+            <Text style={styles.galleryBtnText}>📁 {t('scan.galleryShort')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.captureBtn} onPress={takePicture} />
           <TouchableOpacity style={styles.galleryBtn} onPress={startManualTitleSearch}>
-            <Text style={styles.galleryBtnText}>⌨️ Titel</Text>
+            <Text style={styles.galleryBtnText}>⌨️ {t('scan.titleShort')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -259,12 +397,20 @@ export default function ScanScreen() {
       {/* Suchfeld (ab Step 'search') */}
       {(step === 'search' || step === 'confirm') && (
         <View style={styles.searchSection}>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnSecondary]}
+            onPress={backToCamera}
+            disabled={!!status}
+          >
+            <Text style={styles.btnText}>{t('scan.backToCamera')}</Text>
+          </TouchableOpacity>
+
           <TextInput
             style={styles.input}
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={() => doSearch(searchQuery)}
-            placeholder="Filmtitel..."
+            placeholder={t('scan.movieTitlePlaceholder')}
             placeholderTextColor="#64748b"
             returnKeyType="search"
           />
@@ -273,7 +419,7 @@ export default function ScanScreen() {
             onPress={() => doSearch(searchQuery)}
             disabled={!!status}
           >
-            <Text style={styles.btnText}>🔍 Suchen</Text>
+            <Text style={styles.btnText}>🔍 {t('scan.searchButton')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -301,16 +447,16 @@ export default function ScanScreen() {
       {step === 'confirm' && selectedMovie && (
         <View style={styles.confirmCard}>
           <Text style={styles.confirmTitle}>{selectedMovie.title}</Text>
-          {selectedMovie.year && <Text style={styles.confirmMeta}>Jahr: {selectedMovie.year}</Text>}
-          {selectedMovie.director && <Text style={styles.confirmMeta}>Regie: {selectedMovie.director}</Text>}
+          {selectedMovie.year && <Text style={styles.confirmMeta}>{t('scan.confirmYear', { value: selectedMovie.year })}</Text>}
+          {selectedMovie.director && <Text style={styles.confirmMeta}>{t('scan.confirmDirector', { value: selectedMovie.director })}</Text>}
           {selectedMovie.cast.length > 0 && (
-            <Text style={styles.confirmMeta}>Darsteller: {selectedMovie.cast.slice(0, 3).join(', ')}</Text>
+            <Text style={styles.confirmMeta}>{t('scan.confirmCast', { value: selectedMovie.cast.slice(0, 3).join(', ') })}</Text>
           )}
           <TouchableOpacity style={[styles.btn, styles.btnGreen]} onPress={saveSelectedMovie}>
-            <Text style={styles.btnText}>✓ Speichern</Text>
+            <Text style={styles.btnText}>✓ {t('scan.saveSelected')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={() => setStep('search')}>
-            <Text style={styles.btnText}>Zurück</Text>
+            <Text style={styles.btnText}>{t('scan.back')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -318,16 +464,16 @@ export default function ScanScreen() {
       {/* Fertig */}
       {step === 'done' && (
         <View style={styles.center}>
-          <Text style={styles.doneText}>✅ Film gespeichert!</Text>
+          <Text style={styles.doneText}>✅ {t('scan.saved')}</Text>
           <Text style={styles.doneSub}>{selectedMovie?.title}</Text>
           <TouchableOpacity style={styles.btn} onPress={reset}>
-            <Text style={styles.btnText}>Weiteres Cover scannen</Text>
+            <Text style={styles.btnText}>{t('scan.scanNext')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.btn, styles.btnSecondary]}
             onPress={() => router.push('/')}
           >
-            <Text style={styles.btnText}>Zur Bibliothek</Text>
+            <Text style={styles.btnText}>{t('scan.toLibrary')}</Text>
           </TouchableOpacity>
         </View>
       )}

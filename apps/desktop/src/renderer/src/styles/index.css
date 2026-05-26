@@ -9,7 +9,6 @@
 
   body {
     @apply bg-slate-900 text-white font-sans antialiased;
-    user-select: none;
   }
 
   /* Scrollbar anpassen */
@@ -29,5 +28,14 @@
   -webkit-app-region: drag;
 }
 .no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Eingabefelder/Buttons sollen in Electron immer interaktiv bleiben. */
+input,
+textarea,
+select,
+button,
+[role='button'] {
   -webkit-app-region: no-drag;
 }

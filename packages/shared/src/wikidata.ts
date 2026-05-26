@@ -198,11 +198,13 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
     const runtimeRaw: string | undefined = claims.P2047?.[0]?.mainsnak?.datavalue?.value?.amount
     const runtime = runtimeRaw ? Math.round(parseFloat(runtimeRaw)) : undefined
 
-    // Cover-Bild (P18 → Wikimedia Commons)
+    // Cover-Bild: zuerst Film-Poster (P3383), dann generisches Bild (P18)
+    const posterFile: string | undefined = claims.P3383?.[0]?.mainsnak?.datavalue?.value
     const imageFile: string | undefined = claims.P18?.[0]?.mainsnak?.datavalue?.value
-    const coverUrl = imageFile
-      ? resolvedImageUrls.get(toWikimediaFileKey(imageFile))
-        ?? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(imageFile.replace(/ /g, '_'))}?width=300`
+    const preferredImageFile = posterFile || imageFile
+    const coverUrl = preferredImageFile
+      ? resolvedImageUrls.get(toWikimediaFileKey(preferredImageFile))
+        ?? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(preferredImageFile.replace(/ /g, '_'))}?width=300`
       : undefined
 
     const title = entity.labels?.[langCode]?.value || entity.labels?.en?.value || item.label
@@ -241,7 +243,11 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
  * 2. prop=images → alle Bilder auf der Seite
  * 3. Filter nach "poster" im Dateinamen → imageinfo → URL
  */
-export async function searchMoviePoster(title: string, year?: number, originalTitle?: string): Promise<string | undefined> {
+export async function searchMoviePoster(
+  title: string,
+  year?: number,
+  originalTitle?: string
+): Promise<string | undefined> {
   const BASES = ['https://en.wikipedia.org/w/api.php', 'https://de.wikipedia.org/w/api.php']
   const UA = { 'User-Agent': 'BluRay-Katalog/1.0' }
 
@@ -291,6 +297,7 @@ async function _searchPosterWithTerm(
   const pageCandidates = titles.slice(0, 5)
 
   for (const pageTitle of pageCandidates) {
+
     // ── Schritt 2a: REST-Summary (liefert oft direkt das passende Poster) ──
     const restBase = BASE.replace('/w/api.php', '/api/rest_v1/page/summary')
     const restUrl = `${restBase}/${encodeURIComponent(pageTitle)}`

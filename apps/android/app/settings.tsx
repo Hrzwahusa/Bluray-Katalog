@@ -7,11 +7,17 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
+  Linking,
 } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
+import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
+import { useI18n } from '../lib/i18n'
+import { SUPABASE_SCHEMA_SQL } from '../lib/schema-sql'
 
 export default function SettingsScreen() {
+  const { language, setLanguage, t } = useI18n()
+
   const [url, setUrl] = useState('')
   const [key, setKey] = useState('')
   const [geminiKey, setGeminiKey] = useState('')
@@ -33,11 +39,11 @@ export default function SettingsScreen() {
 
   const handleSave = async () => {
     if (!url.trim() || !key.trim()) {
-      Alert.alert('Fehler', 'Bitte beide Felder ausfüllen.')
+      Alert.alert(t('alert.error'), t('alert.fillBothFields'))
       return
     }
     if (!url.startsWith('https://')) {
-      Alert.alert('Fehler', 'URL muss mit https:// beginnen.')
+      Alert.alert(t('alert.error'), t('alert.urlMustHttps'))
       return
     }
     await SecureStore.setItemAsync('supabaseUrl', url.trim())
@@ -53,16 +59,63 @@ export default function SettingsScreen() {
     }, 1500)
   }
 
+  const handleCopySchemaSql = async () => {
+    try {
+      await Clipboard.setStringAsync(SUPABASE_SCHEMA_SQL)
+      Alert.alert('OK', t('settings.copySchemaDone'))
+    } catch {
+      Alert.alert(t('alert.error'), t('settings.copySchemaError'))
+    }
+  }
+
+  const handleOpenSupabaseWebsite = async () => {
+    const url = 'https://supabase.com'
+    try {
+      const canOpen = await Linking.canOpenURL(url)
+      if (!canOpen) {
+        Alert.alert(t('alert.error'), t('settings.openSupabaseError'))
+        return
+      }
+      await Linking.openURL(url)
+    } catch {
+      Alert.alert(t('alert.error'), t('settings.openSupabaseError'))
+    }
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>Supabase Datenbank</Text>
+      <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
+      <Text style={styles.description}>{t('settings.languageHelp')}</Text>
+      <View style={styles.languageRow}>
+        <TouchableOpacity
+          style={[styles.langBtn, language === 'de' && styles.langBtnActive]}
+          onPress={() => setLanguage('de')}
+        >
+          <Text style={styles.langBtnText}>{t('settings.languageGerman')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
+          onPress={() => setLanguage('en')}
+        >
+          <Text style={styles.langBtnText}>{t('settings.languageEnglish')}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.sectionTitle}>{t('settings.supabaseTitle')}</Text>
       <Text style={styles.description}>
-        Kostenloses Konto auf supabase.com erstellen, SQL-Schema aus{' '}
-        <Text style={styles.mono}>supabase/schema.sql</Text> ausführen und Zugangsdaten eingeben.
+        {t('settings.supabaseDescription')}
       </Text>
 
+      <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleOpenSupabaseWebsite}>
+        <Text style={styles.btnText}>{t('settings.openSupabase')}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleCopySchemaSql}>
+        <Text style={styles.btnText}>{t('settings.copySchema')}</Text>
+      </TouchableOpacity>
+
       <View style={styles.form}>
-        <Text style={styles.label}>Supabase URL</Text>
+        <Text style={styles.label}>{t('settings.supabaseUrl')}</Text>
         <TextInput
           style={styles.input}
           value={url}
@@ -73,7 +126,7 @@ export default function SettingsScreen() {
           keyboardType="url"
         />
 
-        <Text style={[styles.label, { marginTop: 16 }]}>Anon (Public) Key</Text>
+        <Text style={[styles.label, { marginTop: 16 }]}>{t('settings.anonKey')}</Text>
         <TextInput
           style={styles.input}
           value={key}
@@ -84,17 +137,16 @@ export default function SettingsScreen() {
           autoCapitalize="none"
         />
         <Text style={styles.hint}>
-          Zu finden unter: Dashboard → Project Settings → API → anon (public)
+          {t('settings.anonHint')}
         </Text>
       </View>
 
-      <Text style={[styles.sectionTitle, { marginTop: 8 }]}>KI-Titelerkennung (Gemini)</Text>
+      <Text style={[styles.sectionTitle, { marginTop: 8 }]}>{t('settings.geminiTitle')}</Text>
       <Text style={styles.description}>
-        Kostenlosen API-Schlüssel auf aistudio.google.com erstellen (15 Anfragen/Minute gratis).
-        Ohne Key wird der Filmtitel manuell eingegeben.
+        {t('settings.geminiDescription')}
       </Text>
       <View style={styles.form}>
-        <Text style={styles.label}>Gemini API Key</Text>
+        <Text style={styles.label}>{t('settings.geminiKey')}</Text>
         <TextInput
           style={styles.input}
           value={geminiKey}
@@ -104,21 +156,21 @@ export default function SettingsScreen() {
           secureTextEntry
           autoCapitalize="none"
         />
-        <Text style={styles.hint}>Zu finden unter: aistudio.google.com → API Keys</Text>
+        <Text style={styles.hint}>{t('settings.geminiHint')}</Text>
       </View>
 
       <TouchableOpacity
         style={[styles.btn, saved && styles.btnSaved]}
         onPress={handleSave}
       >
-        <Text style={styles.btnText}>{saved ? '✓ Gespeichert!' : 'Einstellungen speichern'}</Text>
+        <Text style={styles.btnText}>{saved ? `✓ ${t('settings.saved')}` : t('settings.save')}</Text>
       </TouchableOpacity>
 
       <View style={styles.infoGrid}>
         <InfoCard title="OCR" value="Gemini AI (online)" />
-        <InfoCard title="Filmdaten" value="Wikidata (kostenlos)" />
-        <InfoCard title="Cover" value="Wikipedia API" />
-        <InfoCard title="Datenbank" value="Supabase (gratis)" />
+        <InfoCard title={t('settings.cardMovies')} value="Wikidata" />
+        <InfoCard title={t('settings.cardCover')} value="Wikipedia API" />
+        <InfoCard title={t('settings.cardDb')} value="Supabase" />
       </View>
     </ScrollView>
   )
@@ -138,6 +190,18 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   sectionTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   description: { color: '#94a3b8', lineHeight: 20 },
+  languageRow: { flexDirection: 'row', gap: 8 },
+  langBtn: {
+    flex: 1,
+    backgroundColor: '#334155',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  langBtnActive: {
+    backgroundColor: '#6366f1',
+  },
+  langBtnText: { color: '#fff', fontWeight: '600' },
   mono: { fontFamily: 'monospace', color: '#818cf8' },
   form: { backgroundColor: '#1e293b', borderRadius: 12, padding: 16, gap: 4 },
   label: { color: '#cbd5e1', fontSize: 13, fontWeight: '600' },
@@ -158,6 +222,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
+  btnSecondary: { backgroundColor: '#334155' },
   btnSaved: { backgroundColor: '#16a34a' },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   infoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

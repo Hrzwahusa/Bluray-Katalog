@@ -19,6 +19,7 @@ import {
   updateMovie,
 } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
+import { useI18n } from '../../lib/i18n'
 
 const IMAGE_HEADERS = {
   'User-Agent': 'BluRay-Katalog/1.0',
@@ -47,6 +48,8 @@ function CoverImage({ uri, title }: { uri: string; title: string }) {
 }
 
 export default function MovieDetailScreen() {
+  const { t } = useI18n()
+
   const { id } = useLocalSearchParams<{ id: string }>()
   const [movie, setMovie] = useState<Movie | null>(null)
   const [loading, setLoading] = useState(true)
@@ -135,10 +138,10 @@ export default function MovieDetailScreen() {
   }
 
   const handleDelete = async () => {
-    Alert.alert('Film löschen', `"${movie?.title}" wirklich löschen?`, [
-      { text: 'Abbrechen', style: 'cancel' },
+    Alert.alert(t('movie.deleteTitle'), t('movie.deleteConfirm', { title: movie?.title ?? '' }), [
+      { text: t('movie.cancel'), style: 'cancel' },
       {
-        text: 'Löschen',
+        text: t('movie.delete'),
         style: 'destructive',
         onPress: async () => {
           const url = await SecureStore.getItemAsync('supabaseUrl')
@@ -156,7 +159,7 @@ export default function MovieDetailScreen() {
   const handleSave = async () => {
     if (!movie?.id) return
     if (!form.title.trim()) {
-      setError('Der Titel darf nicht leer sein.')
+      setError(t('movie.titleEmpty'))
       return
     }
 
@@ -209,7 +212,7 @@ export default function MovieDetailScreen() {
   }
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#6366f1" size="large" /></View>
-  if (!movie) return <View style={styles.center}><Text style={styles.text}>Film nicht gefunden.</Text></View>
+  if (!movie) return <View style={styles.center}><Text style={styles.text}>{t('movie.notFound')}</Text></View>
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -226,20 +229,20 @@ export default function MovieDetailScreen() {
 
       {editing ? (
         <View style={{ gap: 10 }}>
-          <EditField label="Titel" value={form.title} onChangeText={(value) => setForm((prev) => ({ ...prev, title: value }))} />
-          <EditField label="Originaltitel" value={form.original_title} onChangeText={(value) => setForm((prev) => ({ ...prev, original_title: value }))} />
-          <EditField label="Jahr" value={form.year} onChangeText={(value) => setForm((prev) => ({ ...prev, year: value }))} keyboardType="numeric" />
-          <EditField label="Regie" value={form.director} onChangeText={(value) => setForm((prev) => ({ ...prev, director: value }))} />
-          <EditField label="Laufzeit (Min.)" value={form.runtime} onChangeText={(value) => setForm((prev) => ({ ...prev, runtime: value }))} keyboardType="numeric" />
-          <EditField label="Bewertung" value={form.rating} onChangeText={(value) => setForm((prev) => ({ ...prev, rating: value }))} keyboardType="decimal-pad" />
-          <EditField label="Sprache" value={form.language} onChangeText={(value) => setForm((prev) => ({ ...prev, language: value }))} />
-          <EditField label="IMDb-ID" value={form.imdb_id} onChangeText={(value) => setForm((prev) => ({ ...prev, imdb_id: value }))} />
-          <EditField label="Wikidata-ID" value={form.wikidata_id} onChangeText={(value) => setForm((prev) => ({ ...prev, wikidata_id: value }))} />
-          <EditField label="Cover-URL" value={form.cover_url} onChangeText={(value) => setForm((prev) => ({ ...prev, cover_url: value }))} />
-          <EditField label="Foto-URL (lokal)" value={form.bluray_photo_url} onChangeText={(value) => setForm((prev) => ({ ...prev, bluray_photo_url: value }))} />
-          <EditField label="Genres (kommagetrennt)" value={form.genres} onChangeText={(value) => setForm((prev) => ({ ...prev, genres: value }))} />
-          <EditField label="Darsteller (kommagetrennt)" value={form.cast_members} onChangeText={(value) => setForm((prev) => ({ ...prev, cast_members: value }))} />
-          <EditField label="Beschreibung" value={form.description} onChangeText={(value) => setForm((prev) => ({ ...prev, description: value }))} multiline />
+          <EditField label={t('movie.titleField')} value={form.title} onChangeText={(value) => setForm((prev) => ({ ...prev, title: value }))} />
+          <EditField label={t('movie.originalTitle')} value={form.original_title} onChangeText={(value) => setForm((prev) => ({ ...prev, original_title: value }))} />
+          <EditField label={t('movie.year')} value={form.year} onChangeText={(value) => setForm((prev) => ({ ...prev, year: value }))} keyboardType="numeric" />
+          <EditField label={t('movie.director')} value={form.director} onChangeText={(value) => setForm((prev) => ({ ...prev, director: value }))} />
+          <EditField label={t('movie.runtimeMinutesLabel')} value={form.runtime} onChangeText={(value) => setForm((prev) => ({ ...prev, runtime: value }))} keyboardType="numeric" />
+          <EditField label={t('movie.rating')} value={form.rating} onChangeText={(value) => setForm((prev) => ({ ...prev, rating: value }))} keyboardType="decimal-pad" />
+          <EditField label={t('movie.language')} value={form.language} onChangeText={(value) => setForm((prev) => ({ ...prev, language: value }))} />
+          <EditField label={t('movie.imdbId')} value={form.imdb_id} onChangeText={(value) => setForm((prev) => ({ ...prev, imdb_id: value }))} />
+          <EditField label={t('movie.wikidataId')} value={form.wikidata_id} onChangeText={(value) => setForm((prev) => ({ ...prev, wikidata_id: value }))} />
+          <EditField label={t('movie.coverUrl')} value={form.cover_url} onChangeText={(value) => setForm((prev) => ({ ...prev, cover_url: value }))} />
+          <EditField label={t('movie.photoUrl')} value={form.bluray_photo_url} onChangeText={(value) => setForm((prev) => ({ ...prev, bluray_photo_url: value }))} />
+          <EditField label={t('movie.genresCsv')} value={form.genres} onChangeText={(value) => setForm((prev) => ({ ...prev, genres: value }))} />
+          <EditField label={t('movie.castCsv')} value={form.cast_members} onChangeText={(value) => setForm((prev) => ({ ...prev, cast_members: value }))} />
+          <EditField label={t('movie.description')} value={form.description} onChangeText={(value) => setForm((prev) => ({ ...prev, description: value }))} multiline />
 
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
             <TouchableOpacity
@@ -251,10 +254,10 @@ export default function MovieDetailScreen() {
                 setError(null)
               }}
             >
-              <Text style={styles.btnText}>Abbrechen</Text>
+              <Text style={styles.btnText}>{t('movie.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.btn, styles.btnSave]} disabled={saving} onPress={handleSave}>
-              <Text style={styles.btnText}>{saving ? 'Speichere...' : 'Speichern'}</Text>
+              <Text style={styles.btnText}>{saving ? t('movie.saving') : t('movie.save')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -268,15 +271,15 @@ export default function MovieDetailScreen() {
 
           {/* Metadaten */}
           <View style={styles.metaGrid}>
-            {movie.year && <MetaItem label="Jahr" value={movie.year.toString()} />}
-            {movie.director && <MetaItem label="Regie" value={movie.director} />}
-            {movie.runtime && <MetaItem label="Laufzeit" value={`${movie.runtime} Min.`} />}
-            {movie.rating && <MetaItem label="Bewertung" value={`${movie.rating}/10`} />}
+            {movie.year && <MetaItem label={t('movie.year')} value={movie.year.toString()} />}
+            {movie.director && <MetaItem label={t('movie.director')} value={movie.director} />}
+            {movie.runtime && <MetaItem label={t('movie.runtime')} value={t('movie.runtimeMinutes', { value: movie.runtime })} />}
+            {movie.rating && <MetaItem label={t('movie.rating')} value={t('movie.ratingValue', { value: movie.rating })} />}
           </View>
 
           {/* Genres */}
           {movie.genres && movie.genres.length > 0 && (
-            <Section title="Genres">
+            <Section title={t('movie.genres')}>
               <View style={styles.tagRow}>
                 {movie.genres.map((g) => (
                   <View key={g} style={styles.tag}>
@@ -289,7 +292,7 @@ export default function MovieDetailScreen() {
 
           {/* Darsteller */}
           {movie.cast_members && movie.cast_members.length > 0 && (
-            <Section title="Hauptdarsteller">
+            <Section title={t('movie.cast')}>
               <View style={styles.tagRow}>
                 {movie.cast_members.map((a) => (
                   <View key={a} style={[styles.tag, styles.tagActor]}>
@@ -302,17 +305,17 @@ export default function MovieDetailScreen() {
 
           {/* Beschreibung */}
           {movie.description && (
-            <Section title="Beschreibung">
+            <Section title={t('movie.description')}>
               <Text style={styles.description}>{movie.description}</Text>
             </Section>
           )}
 
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
             <TouchableOpacity style={[styles.btn, styles.btnEdit]} onPress={() => setEditing(true)}>
-              <Text style={styles.btnText}>Bearbeiten</Text>
+              <Text style={styles.btnText}>{t('movie.edit')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.btn, styles.deleteBtn]} onPress={handleDelete}>
-              <Text style={styles.deleteBtnText}>🗑 Film löschen</Text>
+              <Text style={styles.deleteBtnText}>🗑 {t('movie.deleteMovie')}</Text>
             </TouchableOpacity>
           </View>
         </>

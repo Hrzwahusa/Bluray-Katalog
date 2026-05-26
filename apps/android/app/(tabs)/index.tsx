@@ -14,6 +14,7 @@ import { router, useFocusEffect } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { getAllMovies, resolveWikimediaImageUrls } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
+import { useI18n } from '../../lib/i18n'
 
 const IMAGE_HEADERS = {
   'User-Agent': 'BluRay-Katalog/1.0',
@@ -42,6 +43,8 @@ function CoverImage({ uri, title, style }: { uri: string; title: string; style: 
 }
 
 export default function LibraryScreen() {
+  const { t } = useI18n()
+
   const [movies, setMovies] = useState<Movie[]>([])
   const [filtered, setFiltered] = useState<Movie[]>([])
   const [query, setQuery] = useState('')
@@ -56,7 +59,7 @@ export default function LibraryScreen() {
         (await SecureStore.getItemAsync('supabaseKey')) ||
         (await SecureStore.getItemAsync('supabaseAnonKey'))
       if (!url || !key) {
-        setError('Bitte Supabase-Zugangsdaten in den Einstellungen hinterlegen.')
+        setError(t('library.missingSupabase'))
         setLoading(false)
         return
       }
@@ -77,7 +80,7 @@ export default function LibraryScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     loadMovies()
@@ -134,7 +137,7 @@ export default function LibraryScreen() {
       <View style={styles.searchBar}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Suche..."
+          placeholder={t('library.searchPlaceholder')}
           placeholderTextColor="#64748b"
           value={query}
           onChangeText={setQuery}
@@ -153,7 +156,7 @@ export default function LibraryScreen() {
             style={styles.settingsBtn}
             onPress={() => router.push('/settings')}
           >
-            <Text style={styles.settingsBtnText}>Einstellungen öffnen</Text>
+            <Text style={styles.settingsBtnText}>{t('library.openSettings')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -174,13 +177,13 @@ export default function LibraryScreen() {
             <View style={styles.center}>
               <Text style={styles.emptyText}>
                 {movies.length === 0
-                  ? 'Noch keine Filme. Scannen Sie ein Cover!'
-                  : 'Keine Treffer'}
+                  ? t('library.noMovies')
+                  : t('library.noResults')}
               </Text>
             </View>
           }
           ListHeaderComponent={
-            <Text style={styles.count}>{filtered.length} Filme</Text>
+            <Text style={styles.count}>{t('library.count', { count: filtered.length })}</Text>
           }
         />
       )}

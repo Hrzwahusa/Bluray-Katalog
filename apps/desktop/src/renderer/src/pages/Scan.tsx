@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react'
+import React, { useRef, useState, useCallback, useEffect } from 'react'
 import type { AppSettings } from '../App'
 import type { WikidataMovie } from '@shared/types'
 
@@ -12,10 +12,86 @@ interface ScanProps {
 
 type Step = 'capture' | 'ocr' | 'select' | 'confirm' | 'saving' | 'done'
 
+type GeminiMovieGuess = {
+  title?: string
+  originalTitle?: string
+  year?: number
+  director?: string
+  genres?: string[]
+  cast?: string[]
+  runtime?: number
+  imdbId?: string
+  description?: string
+  coverImageUrl?: string
+  posterHints?: string[]
+}
+
+type CoverOption = {
+  id: string
+  label: string
+  url: string
+}
+
+function buildGeminiFallbackCandidate(guess: GeminiMovieGuess): WikidataMovie | null {
+  if (!guess.title) return null
+  return {
+    wikidataId: `gemini:${guess.title.toLowerCase().replace(/\s+/g, '-')}`,
+    title: guess.title,
+    originalTitle: guess.originalTitle,
+    year: guess.year,
+    genres: guess.genres ?? [],
+    cast: guess.cast ?? [],
+    director: guess.director,
+    description: guess.description,
+    imdbId: guess.imdbId,
+    runtime: guess.runtime,
+  }
+}
+
+function isSvgDerivedImageUrl(url?: string): boolean {
+  if (!url) return false
+  const normalized = url.toLowerCase()
+  return normalized.endsWith('.svg') || normalized.includes('.svg?') || normalized.includes('.svg.')
+}
+
+function normalizeCoverUrl(url?: string): string | undefined {
+  if (!url) return undefined
+  const trimmed = url.trim()
+  if (!trimmed) return undefined
+  if (!/^https?:\/\//i.test(trimmed)) return undefined
+  if (isSvgDerivedImageUrl(trimmed)) return undefined
+  return trimmed
+}
+
+function dedupeCoverOptions(options: CoverOption[]): CoverOption[] {
+  const seen = new Set<string>()
+  const out: CoverOption[] = []
+  for (const option of options) {
+    const key = option.url.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(option)
+  }
+  return out
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  try {
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    })
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 export function Scan({ settings, onSuccess }: ScanProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const [step, setStep] = useState<Step>('capture')
   const [cameraActive, setCameraActive] = useState(false)
@@ -24,8 +100,21 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [candidates, setCandidates] = useState<WikidataMovie[]>([])
   const [selectedMovie, setSelectedMovie] = useState<WikidataMovie | null>(null)
+  const [geminiGuess, setGeminiGuess] = useState<GeminiMovieGuess | null>(null)
+  const [coverOptions, setCoverOptions] = useState<CoverOption[]>([])
+  const [selectedCoverUrl, setSelectedCoverUrl] = useState<string>('')
+  const [loadingCoverOptions, setLoadingCoverOptions] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
+
+  useEffect(() => {
+    if (step !== 'select') return
+    const id = setTimeout(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+    }, 0)
+    return () => clearTimeout(id)
+  }, [step])
 
   // ── Kamera starten ──────────────────────────────────────────────────
   const startCamera = useCallback(async () => {
@@ -99,17 +188,18 @@ export function Scan({ settings, onSuccess }: ScanProps) {
 
     // Texterkennung starten
     try {
-      setStatusMessage('Texterkennung läuft (Tesseract OCR)...')
+      setStatusMessage('Titelerkennung läuft...')
       const result = await window.api.recognizeText(ocrUrl)
       const cleanedText = extractTitleFromOcr(result.text)
       setOcrText(result.text)
+      setGeminiGuess(result.movieGuess ?? null)
       setSearchQuery(cleanedText)
       setStatusMessage('')
       setStep('select')
 
       // Automatisch suchen
       if (cleanedText) {
-        await doSearch(cleanedText)
+        await doSearch(cleanedText, result.movieGuess ?? null)
       }
     } catch (e) {
       setError(`OCR-Fehler: ${(e as Error).message}`)
@@ -118,18 +208,27 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   }, [stopCamera])
 
   // ── Filmsuche ───────────────────────────────────────────────────────
-  const doSearch = async (query: string) => {
+  const doSearch = async (query: string, geminiGuessFromCall?: GeminiMovieGuess | null) => {
     if (!query.trim()) return
     try {
       setStatusMessage('Suche in Wikidata...')
       setCandidates([])
       const results = await window.api.searchMovies(query.trim())
-      setCandidates(results)
-      if (results.length === 0) {
-        setError('Keine Filme gefunden. Bitte Suchbegriff anpassen.')
-      } else {
+      if (results.length > 0) {
+        setCandidates(results)
         setError(null)
+        return
       }
+
+      const fallbackGuess = geminiGuessFromCall ?? geminiGuess
+      const fallback = fallbackGuess ? buildGeminiFallbackCandidate(fallbackGuess) : null
+      if (fallback) {
+        setCandidates([fallback])
+        setError(null)
+        return
+      }
+
+      setError('Keine Filme gefunden. Bitte Suchbegriff anpassen.')
     } catch (e) {
       setError(`Suchfehler: ${(e as Error).message}`)
     } finally {
@@ -141,12 +240,63 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     if (cameraActive) stopCamera()
     setCapturedImage(null)
     setOcrText('')
+    setGeminiGuess(null)
     setCandidates([])
     setSelectedMovie(null)
+    setCoverOptions([])
+    setSelectedCoverUrl('')
     setError(null)
     setStatusMessage('')
     setStep('select')
   }, [cameraActive, stopCamera])
+
+  const openConfirmStep = async (movie: WikidataMovie) => {
+    setSelectedMovie(movie)
+    setCoverOptions([])
+    setSelectedCoverUrl('')
+    setLoadingCoverOptions(true)
+    setError(null)
+    setStep('confirm')
+
+    try {
+      const options: CoverOption[] = []
+      const wikidataCover = normalizeCoverUrl(movie.coverUrl)
+      if (wikidataCover) {
+        options.push({ id: 'wikidata', label: 'Wikidata-Bild', url: wikidataCover })
+      }
+
+      const geminiCover = normalizeCoverUrl(geminiGuess?.coverImageUrl)
+      if (geminiCover) {
+        options.push({ id: 'gemini', label: 'Gemini-Vorschlag', url: geminiCover })
+      }
+
+      const immediateOptions = dedupeCoverOptions(options)
+      setCoverOptions(immediateOptions)
+      setSelectedCoverUrl(immediateOptions[0]?.url ?? wikidataCover ?? '')
+
+      setStatusMessage('Suche Film-Poster...')
+      const searchedPoster = await withTimeout(
+        window.api.searchMoviePoster(movie.title, movie.year, movie.originalTitle),
+        30000,
+        'Poster-Suche hat zu lange gedauert.'
+      )
+      const posterCover = normalizeCoverUrl(searchedPoster)
+      if (posterCover) {
+        options.push({ id: 'poster-search', label: 'Poster-Suche', url: posterCover })
+      }
+
+      const uniqueOptions = dedupeCoverOptions(options)
+      setCoverOptions(uniqueOptions)
+      setSelectedCoverUrl(uniqueOptions[0]?.url ?? wikidataCover ?? '')
+    } catch {
+      const fallbackCover = normalizeCoverUrl(movie.coverUrl) ?? ''
+      setCoverOptions(fallbackCover ? [{ id: 'fallback', label: 'Standardbild', url: fallbackCover }] : [])
+      setSelectedCoverUrl(fallbackCover)
+    } finally {
+      setStatusMessage('')
+      setLoadingCoverOptions(false)
+    }
+  }
 
   // ── Film bestätigen ─────────────────────────────────────────────────
   const confirmAndSave = async () => {
@@ -155,11 +305,10 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     setStatusMessage('Hole Wikipedia-Details...')
 
     try {
+      const isGeminiFallback = selectedMovie.wikidataId.startsWith('gemini:')
+
       // Zusätzliche Details von Wikipedia
       const wikiDetails = await window.api.getWikipediaDetails(selectedMovie.title, 'de')
-
-      setStatusMessage('Suche Film-Poster...')
-      const posterUrl = await window.api.searchMoviePoster(selectedMovie.title, selectedMovie.year, selectedMovie.originalTitle)
 
       setStatusMessage('Speichere in Datenbank...')
       await saveMovie(
@@ -171,8 +320,8 @@ export function Scan({ settings, onSuccess }: ScanProps) {
           cast_members: selectedMovie.cast,
           director: selectedMovie.director,
           description: selectedMovie.description || wikiDetails.description,
-          cover_url: posterUrl || selectedMovie.coverUrl || capturedImage || undefined,
-          wikidata_id: selectedMovie.wikidataId,
+          cover_url: selectedCoverUrl || selectedMovie.coverUrl || undefined,
+          wikidata_id: isGeminiFallback ? undefined : selectedMovie.wikidataId,
           imdb_id: selectedMovie.imdbId,
           runtime: selectedMovie.runtime,
           bluray_photo_url: capturedImage || undefined,
@@ -192,9 +341,12 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const reset = () => {
     setCapturedImage(null)
     setOcrText('')
+    setGeminiGuess(null)
     setSearchQuery('')
     setCandidates([])
     setSelectedMovie(null)
+    setCoverOptions([])
+    setSelectedCoverUrl('')
     setError(null)
     setStatusMessage('')
     setStep('capture')
@@ -314,8 +466,9 @@ export function Scan({ settings, onSuccess }: ScanProps) {
             )}
 
             {/* Suchfeld */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 no-drag">
               <input
+                ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -350,10 +503,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 {candidates.map((movie) => (
                   <button
                     key={movie.wikidataId}
-                    onClick={() => {
-                      setSelectedMovie(movie)
-                      setStep('confirm')
-                    }}
+                    onClick={() => { void openConfirmStep(movie) }}
                     className="w-full flex items-center gap-4 p-4 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 hover:border-brand-500 transition-all text-left"
                   >
                     {movie.coverUrl ? (
@@ -401,9 +551,9 @@ export function Scan({ settings, onSuccess }: ScanProps) {
             <h2 className="text-lg font-semibold text-white">Film bestätigen</h2>
             <div className="bg-slate-800 rounded-xl p-6 space-y-4">
               <div className="flex gap-6">
-                {selectedMovie.coverUrl && (
+                {(selectedCoverUrl || selectedMovie.coverUrl) && (
                   <img
-                    src={selectedMovie.coverUrl}
+                    src={selectedCoverUrl || selectedMovie.coverUrl}
                     className="w-32 rounded-lg object-cover bg-black shrink-0 shadow-lg"
                     alt="Cover"
                   />
@@ -433,6 +583,37 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                     </p>
                   )}
                 </div>
+              </div>
+
+              <div className="space-y-2 border-t border-slate-700 pt-4">
+                <p className="text-sm text-slate-300">Cover-Auswahl</p>
+                {loadingCoverOptions && (
+                  <div className="flex items-center gap-2 text-slate-400 text-sm">
+                    <span className="w-4 h-4"><Loader /></span>
+                    {statusMessage || 'Suche weitere Cover-Optionen...'}
+                  </div>
+                )}
+
+                {coverOptions.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {coverOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        onClick={() => setSelectedCoverUrl(option.url)}
+                        className={`text-left rounded-lg border p-2 transition-colors ${
+                          selectedCoverUrl === option.url
+                            ? 'border-brand-500 bg-slate-700'
+                            : 'border-slate-600 bg-slate-900 hover:border-slate-500'
+                        }`}
+                      >
+                        <img src={option.url} alt={option.label} className="w-full h-28 object-cover rounded" />
+                        <p className="text-xs text-slate-300 mt-2 truncate">{option.label}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Keine Cover-Optionen gefunden, es wird das Standardbild verwendet.</p>
+                )}
               </div>
             </div>
 

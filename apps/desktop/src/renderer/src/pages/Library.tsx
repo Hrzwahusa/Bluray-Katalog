@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { AppSettings } from '../App'
 import type { Movie } from '@shared/types'
 import { getAllMovies, deleteMovie, updateMovie } from '@shared/supabase'
@@ -19,6 +19,10 @@ export function Library({ settings, onScanClick }: LibraryProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
   const [genreFilter, setGenreFilter] = useState<string>('Alle')
+  const [restoreSearchFocus, setRestoreSearchFocus] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const hasDb = settings.supabaseUrl && settings.supabaseKey
 
@@ -66,10 +70,16 @@ export function Library({ settings, onScanClick }: LibraryProps) {
   const allGenres = ['Alle', ...Array.from(new Set(movies.flatMap((m) => m.genres || []))).sort()]
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Film wirklich löschen?')) return
-    await deleteMovie(id, settings.supabaseUrl, settings.supabaseKey)
-    await loadMovies()
-    setSelectedMovie(null)
+    setIsDeleting(true)
+    try {
+      await deleteMovie(id, settings.supabaseUrl, settings.supabaseKey)
+      await loadMovies()
+      setRestoreSearchFocus(true)
+      setSelectedMovie(null)
+      setDeleteConfirmOpen(false)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const handleSave = async (movie: Movie) => {
@@ -78,14 +88,57 @@ export function Library({ settings, onScanClick }: LibraryProps) {
     setSelectedMovie(updated)
   }
 
+  useEffect(() => {
+    if (selectedMovie !== null || !restoreSearchFocus) return
+    const id = setTimeout(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+      setRestoreSearchFocus(false)
+    }, 0)
+    return () => clearTimeout(id)
+  }, [selectedMovie, restoreSearchFocus])
+
   if (selectedMovie) {
     return (
-      <MovieDetail
-        movie={selectedMovie}
-        onBack={() => setSelectedMovie(null)}
-        onDelete={() => selectedMovie.id && handleDelete(selectedMovie.id)}
-        onSave={handleSave}
-      />
+      <>
+        <MovieDetail
+          movie={selectedMovie}
+          onBack={() => {
+            setDeleteConfirmOpen(false)
+            setRestoreSearchFocus(true)
+            setSelectedMovie(null)
+          }}
+          onDelete={() => setDeleteConfirmOpen(true)}
+          onSave={handleSave}
+        />
+
+        {deleteConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 no-drag">
+            <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+              <h2 className="text-lg font-semibold text-white">Film wirklich loeschen?</h2>
+              <p className="mt-2 text-sm text-slate-300">
+                Dieser Eintrag wird dauerhaft entfernt.
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={isDeleting}
+                  className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors disabled:opacity-60"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={() => selectedMovie.id && handleDelete(selectedMovie.id)}
+                  disabled={isDeleting}
+                  className="px-3 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm transition-colors disabled:opacity-60"
+                >
+                  {isDeleting ? 'Loesche...' : 'Loeschen'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     )
   }
 
@@ -106,12 +159,13 @@ export function Library({ settings, onScanClick }: LibraryProps) {
       </div>
 
       {/* Such- und Filterleiste */}
-      <div className="flex items-center gap-4 px-6 py-3 bg-slate-800 border-b border-slate-700 shrink-0">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex items-center gap-4 px-6 py-3 bg-slate-800 border-b border-slate-700 shrink-0 no-drag">
+        <div className="relative flex-1 max-w-md no-drag">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400">
             <Search />
           </span>
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Suche nach Titel, Schauspieler, Regisseur..."
             value={query}

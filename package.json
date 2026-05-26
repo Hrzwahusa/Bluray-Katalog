@@ -10,6 +10,7 @@
     "desktop": "npm run dev --workspace=apps/desktop",
     "desktop:build": "npm run build --workspace=apps/desktop",
     "desktop:package": "npm run package --workspace=apps/desktop",
+    "desktop:package:portable": "npm run package:portable --workspace=apps/desktop",
     "android": "npm run start --workspace=apps/android",
     "android:build": "npm run build --workspace=apps/android",
     "android:build:production": "npm run build:production --workspace=apps/android",

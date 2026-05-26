@@ -8,7 +8,10 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package": "npm run build && electron-builder"
+    "package": "npm run build && electron-builder",
+    "package:dir": "npm run build && electron-builder --dir --config.win.signAndEditExecutable=false",
+    "zip:win-unpacked": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path 'release/BluRay-Katalog-win-unpacked.zip') { Remove-Item 'release/BluRay-Katalog-win-unpacked.zip' -Force }; Compress-Archive -Path 'release/win-unpacked/*' -DestinationPath 'release/BluRay-Katalog-win-unpacked.zip' -CompressionLevel Optimal\"",
+    "package:portable": "npm run package:dir && npm run zip:win-unpacked"
   },
   "dependencies": {
     "@bluray-katalog/shared": "*",

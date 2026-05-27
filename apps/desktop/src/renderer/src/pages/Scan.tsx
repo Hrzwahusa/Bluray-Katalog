@@ -10,7 +10,19 @@ interface ScanProps {
   onSuccess: () => void
 }
 
-type Step = 'capture' | 'ocr' | 'select' | 'confirm' | 'saving' | 'done'
+type Step = 'capture' | 'ocr' | 'select' | 'manual' | 'confirm' | 'saving' | 'done'
+
+type ManualMovieForm = {
+  title: string
+  originalTitle: string
+  year: string
+  director: string
+  genres: string
+  cast: string
+  runtime: string
+  imdbId: string
+  description: string
+}
 
 type GeminiMovieGuess = {
   title?: string
@@ -104,8 +116,31 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const [coverOptions, setCoverOptions] = useState<CoverOption[]>([])
   const [selectedCoverUrl, setSelectedCoverUrl] = useState<string>('')
   const [loadingCoverOptions, setLoadingCoverOptions] = useState(false)
+  const [manualForm, setManualForm] = useState<ManualMovieForm>({
+    title: '',
+    originalTitle: '',
+    year: '',
+    director: '',
+    genres: '',
+    cast: '',
+    runtime: '',
+    imdbId: '',
+    description: '',
+  })
   const [error, setError] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
+
+  const parseCsv = (value: string): string[] => value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+
+  const parseOptionalNumber = (value: string): number | undefined => {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+    const parsed = Number(trimmed.replace(',', '.'))
+    return Number.isFinite(parsed) ? Math.round(parsed) : undefined
+  }
 
   useEffect(() => {
     if (step !== 'select') return
@@ -250,6 +285,45 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     setStep('select')
   }, [cameraActive, stopCamera])
 
+  const openManualEntry = useCallback(() => {
+    setManualForm({
+      title: searchQuery.trim(),
+      originalTitle: '',
+      year: '',
+      director: '',
+      genres: '',
+      cast: '',
+      runtime: '',
+      imdbId: '',
+      description: '',
+    })
+    setError(null)
+    setStep('manual')
+  }, [searchQuery])
+
+  const confirmManualEntry = useCallback(() => {
+    const title = manualForm.title.trim()
+    if (!title) {
+      setError('Bitte mindestens einen Titel eingeben.')
+      return
+    }
+
+    const movie: WikidataMovie = {
+      wikidataId: `manual:${Date.now()}`,
+      title,
+      originalTitle: manualForm.originalTitle.trim() || undefined,
+      year: parseOptionalNumber(manualForm.year),
+      director: manualForm.director.trim() || undefined,
+      genres: parseCsv(manualForm.genres),
+      cast: parseCsv(manualForm.cast),
+      runtime: parseOptionalNumber(manualForm.runtime),
+      imdbId: manualForm.imdbId.trim() || undefined,
+      description: manualForm.description.trim() || undefined,
+    }
+
+    void openConfirmStep(movie)
+  }, [manualForm])
+
   const openConfirmStep = async (movie: WikidataMovie) => {
     setSelectedMovie(movie)
     setCoverOptions([])
@@ -305,7 +379,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     setStatusMessage('Hole Wikipedia-Details...')
 
     try {
-      const isGeminiFallback = selectedMovie.wikidataId.startsWith('gemini:')
+      const isLocalCandidate = selectedMovie.wikidataId.startsWith('gemini:') || selectedMovie.wikidataId.startsWith('manual:')
 
       // Zusätzliche Details von Wikipedia
       const wikiDetails = await window.api.getWikipediaDetails(selectedMovie.title, 'de')
@@ -321,7 +395,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
           director: selectedMovie.director,
           description: selectedMovie.description || wikiDetails.description,
           cover_url: selectedCoverUrl || selectedMovie.coverUrl || undefined,
-          wikidata_id: isGeminiFallback ? undefined : selectedMovie.wikidataId,
+          wikidata_id: isLocalCandidate ? undefined : selectedMovie.wikidataId,
           imdb_id: selectedMovie.imdbId,
           runtime: selectedMovie.runtime,
           bluray_photo_url: capturedImage || undefined,
@@ -542,6 +616,109 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 ))}
               </div>
             )}
+
+            <button
+              onClick={openManualEntry}
+              className="w-full flex items-center gap-3 p-4 bg-slate-800/80 hover:bg-slate-700 rounded-xl border border-dashed border-brand-500 transition-colors text-left"
+            >
+              <span className="text-xl">✍️</span>
+              <div>
+                <div className="font-semibold text-white">Film manuell eingeben</div>
+                <div className="text-slate-400 text-sm">Kein Treffer? Titel und Metadaten selbst erfassen.</div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {step === 'manual' && (
+          <div className="max-w-2xl mx-auto space-y-4">
+            <h2 className="text-lg font-semibold text-white">Film manuell eingeben</h2>
+            <div className="bg-slate-800 rounded-xl p-4 space-y-3 border border-slate-700">
+              <input
+                type="text"
+                value={manualForm.title}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Titel *"
+                className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                value={manualForm.originalTitle}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, originalTitle: e.target.value }))}
+                placeholder="Originaltitel"
+                className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  type="number"
+                  value={manualForm.year}
+                  onChange={(e) => setManualForm((prev) => ({ ...prev, year: e.target.value }))}
+                  placeholder="Jahr"
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={manualForm.director}
+                  onChange={(e) => setManualForm((prev) => ({ ...prev, director: e.target.value }))}
+                  placeholder="Regie"
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <input
+                type="text"
+                value={manualForm.genres}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, genres: e.target.value }))}
+                placeholder="Genres (kommagetrennt)"
+                className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                value={manualForm.cast}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, cast: e.target.value }))}
+                placeholder="Darsteller (kommagetrennt)"
+                className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  type="number"
+                  value={manualForm.runtime}
+                  onChange={(e) => setManualForm((prev) => ({ ...prev, runtime: e.target.value }))}
+                  placeholder="Laufzeit (Min.)"
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={manualForm.imdbId}
+                  onChange={(e) => setManualForm((prev) => ({ ...prev, imdbId: e.target.value }))}
+                  placeholder="IMDb-ID"
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <textarea
+                value={manualForm.description}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Beschreibung"
+                rows={4}
+                className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none resize-y"
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep('select')}
+                  className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                >
+                  Zurück
+                </button>
+                <button
+                  onClick={confirmManualEntry}
+                  className="flex-1 px-4 py-2.5 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
+                >
+                  Zur Bestätigung
+                </button>
+              </div>
+            </div>
+            {error && (
+              <div className="p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">{error}</div>
+            )}
           </div>
         )}
 
@@ -693,6 +870,7 @@ function StepIndicator({ current }: { current: Step }) {
     { key: 'capture', label: 'Foto' },
     { key: 'ocr', label: 'OCR' },
     { key: 'select', label: 'Auswahl' },
+    { key: 'manual', label: 'Manuell' },
     { key: 'confirm', label: 'Bestätigen' },
     { key: 'saving', label: 'Speichern' },
     { key: 'done', label: 'Fertig' },

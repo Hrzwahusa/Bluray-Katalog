@@ -7,6 +7,7 @@ interface MovieDetailProps {
   onBack: () => void
   onDelete: () => void
   onSave: (movie: Movie) => Promise<void>
+  onApplyFilter: (type: 'genre' | 'actor', value: string) => void
 }
 
 interface MovieFormState {
@@ -65,7 +66,12 @@ function toNullable(value: string): string | undefined {
   return trimmed || undefined
 }
 
-export function MovieDetail({ movie, onBack, onDelete, onSave }: MovieDetailProps) {
+function buildTmdbSearchUrl(movie: Movie): string {
+  const query = movie.title.trim()
+  return `https://www.themoviedb.org/search?query=${encodeURIComponent(query)}`
+}
+
+export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: MovieDetailProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -248,12 +254,13 @@ export function MovieDetail({ movie, onBack, onDelete, onSave }: MovieDetailProp
                     <h3 className="text-slate-500 text-sm font-medium mb-2">Genres</h3>
                     <div className="flex flex-wrap gap-2">
                       {movie.genres.map((g) => (
-                        <span
+                        <button
                           key={g}
+                          onClick={() => onApplyFilter('genre', g)}
                           className="px-3 py-1 bg-brand-900 text-brand-300 rounded-full text-sm border border-brand-800"
                         >
                           {g}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -265,12 +272,13 @@ export function MovieDetail({ movie, onBack, onDelete, onSave }: MovieDetailProp
                     <h3 className="text-slate-500 text-sm font-medium mb-2">Hauptdarsteller</h3>
                     <div className="flex flex-wrap gap-2">
                       {movie.cast_members.map((actor) => (
-                        <span
+                        <button
                           key={actor}
+                          onClick={() => onApplyFilter('actor', actor)}
                           className="px-3 py-1 bg-slate-800 text-slate-300 rounded-full text-sm border border-slate-700"
                         >
                           {actor}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -283,6 +291,15 @@ export function MovieDetail({ movie, onBack, onDelete, onSave }: MovieDetailProp
                     <p className="text-slate-300 text-sm leading-relaxed">{movie.description}</p>
                   </div>
                 )}
+
+                <div>
+                  <button
+                    onClick={() => window.open(buildTmdbSearchUrl(movie), '_blank', 'noopener,noreferrer')}
+                    className="px-3 py-2 bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg text-sm transition-colors"
+                  >
+                    Auf TMDB öffnen
+                  </button>
+                </div>
               </>
             )}
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { getAllMovies, resolveWikimediaImageUrls } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
@@ -20,6 +20,8 @@ const IMAGE_HEADERS = {
   'User-Agent': 'BluRay-Katalog/1.0',
   Referer: 'https://en.wikipedia.org/',
 }
+
+const LIBRARY_VIEW_MODE_KEY = 'libraryViewMode'
 
 function CoverImage({ uri, title, style }: { uri: string; title: string; style: object }) {
   const [failed, setFailed] = useState(false)
@@ -44,13 +46,44 @@ function CoverImage({ uri, title, style }: { uri: string; title: string; style: 
 
 export default function LibraryScreen() {
   const { t } = useI18n()
+  const { filterType, filterValue } = useLocalSearchParams<{ filterType?: string; filterValue?: string }>()
 
+  const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
+  const [genreFilter, setGenreFilter] = useState<string>('__all__')
+  const [genreMenuOpen, setGenreMenuOpen] = useState(false)
   const [movies, setMovies] = useState<Movie[]>([])
   const [filtered, setFiltered] = useState<Movie[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const lastAppliedFilterRef = useRef('')
+
+  const allGenres = [
+    { value: '__all__', label: t('library.genreAll') },
+    ...Array.from(new Set(movies.flatMap((m) => m.genres || []))).sort().map((genre) => ({ value: genre, label: genre })),
+  ]
+
+  useEffect(() => {
+    let mounted = true
+    const loadViewMode = async () => {
+      const stored = await SecureStore.getItemAsync(LIBRARY_VIEW_MODE_KEY)
+      if (!mounted) return
+      if (stored === 'gallery' || stored === 'list') {
+        setViewMode(stored)
+      }
+    }
+    loadViewMode()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    SecureStore.setItemAsync(LIBRARY_VIEW_MODE_KEY, viewMode).catch(() => {
+      // Ignore persistence errors and keep UI responsive.
+    })
+  }, [viewMode])
 
   const loadMovies = useCallback(async () => {
     try {
@@ -93,56 +126,185 @@ export default function LibraryScreen() {
   )
 
   useEffect(() => {
-    if (!query.trim()) {
-      setFiltered(movies)
-      return
+    let result = movies
+
+    if (genreFilter !== '__all__') {
+      result = result.filter((m) => m.genres?.includes(genreFilter))
     }
-    const q = query.toLowerCase()
-    setFiltered(
-      movies.filter(
+
+    if (query.trim()) {
+      const q = query.toLowerCase()
+      result = result.filter(
         (m) =>
           m.title.toLowerCase().includes(q) ||
           m.cast_members?.some((a) => a.toLowerCase().includes(q)) ||
           m.director?.toLowerCase().includes(q)
       )
-    )
-  }, [query, movies])
+    }
 
-  const renderItem = ({ item }: { item: Movie }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/movie/${item.id}`)}
-      activeOpacity={0.8}
-    >
-      {item.cover_url && !item.cover_url.startsWith('data:') ? (
-        <CoverImage uri={item.cover_url} title={item.title} style={styles.cover} />
-      ) : (
-        <View style={[styles.cover, styles.coverPlaceholder]}>
-          <Text style={styles.coverPlaceholderText}>🎬</Text>
-        </View>
-      )}
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-        {item.year && <Text style={styles.cardYear}>{item.year}</Text>}
-        {item.genres && item.genres.length > 0 && (
-          <Text style={styles.cardGenre} numberOfLines={1}>{item.genres[0]}</Text>
+    setFiltered(result)
+  }, [query, movies, genreFilter])
+
+  useEffect(() => {
+    const type = typeof filterType === 'string' ? filterType : ''
+    const value = typeof filterValue === 'string' ? filterValue : ''
+    if (!type || !value) return
+
+    const key = `${type}:${value}`
+    if (lastAppliedFilterRef.current === key) return
+    lastAppliedFilterRef.current = key
+
+    if (type === 'genre') {
+      setGenreFilter(value)
+      setQuery('')
+    }
+
+    if (type === 'actor') {
+      setGenreFilter('__all__')
+      setQuery(value)
+    }
+
+    setViewMode('gallery')
+    setGenreMenuOpen(false)
+  }, [filterType, filterValue])
+
+  const renderItem = ({ item }: { item: Movie }) => {
+    if (viewMode === 'list') {
+      return (
+        <TouchableOpacity
+          style={styles.listRow}
+          onPress={() => router.push(`/movie/${item.id}`)}
+          activeOpacity={0.8}
+        >
+          {item.cover_url && !item.cover_url.startsWith('data:') ? (
+            <CoverImage uri={item.cover_url} title={item.title} style={styles.listCover} />
+          ) : (
+            <View style={[styles.listCover, styles.coverPlaceholder]}>
+              <Text style={styles.coverPlaceholderText}>[]</Text>
+            </View>
+          )}
+          <View style={styles.listInfo}>
+            <Text style={styles.listTitle} numberOfLines={1}>{item.title}</Text>
+            <Text style={styles.listMeta} numberOfLines={1}>
+              {[item.year ? String(item.year) : undefined, item.director, item.genres?.[0]]
+                .filter(Boolean)
+                .join(' | ') || '-'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => router.push(`/movie/${item.id}`)}
+        activeOpacity={0.8}
+      >
+        {item.cover_url && !item.cover_url.startsWith('data:') ? (
+          <CoverImage uri={item.cover_url} title={item.title} style={styles.cover} />
+        ) : (
+          <View style={[styles.cover, styles.coverPlaceholder]}>
+            <Text style={styles.coverPlaceholderText}>[]</Text>
+          </View>
         )}
-      </View>
-    </TouchableOpacity>
-  )
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+          {item.year && <Text style={styles.cardYear}>{item.year}</Text>}
+          {item.genres && item.genres.length > 0 && (
+            <Text style={styles.cardGenre} numberOfLines={1}>{item.genres[0]}</Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    )
+  }
 
   return (
     <View style={styles.container}>
       {/* Suchleiste */}
       <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder={t('library.searchPlaceholder')}
-          placeholderTextColor="#64748b"
-          value={query}
-          onChangeText={setQuery}
-          clearButtonMode="while-editing"
-        />
+        <View style={styles.searchInputWrap}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('library.searchPlaceholder')}
+            placeholderTextColor="#64748b"
+            value={query}
+            onChangeText={setQuery}
+            clearButtonMode="while-editing"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearBtn}
+              onPress={() => setQuery('')}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={t('library.clearSearch')}
+            >
+              <Text style={styles.clearBtnText}>X</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.viewToggle}>
+          <TouchableOpacity
+            style={[styles.viewBtn, viewMode === 'gallery' && styles.viewBtnActive]}
+            onPress={() => setViewMode('gallery')}
+          >
+            <Text style={[styles.viewBtnText, viewMode === 'gallery' && styles.viewBtnTextActive]}>
+              {t('library.viewGallery')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewBtn, viewMode === 'list' && styles.viewBtnActive]}
+            onPress={() => setViewMode('list')}
+          >
+            <Text style={[styles.viewBtnText, viewMode === 'list' && styles.viewBtnTextActive]}>
+              {t('library.viewList')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.genreFilterWrap}>
+          <Text style={styles.genreLabel}>{t('library.genreLabel')}</Text>
+          <TouchableOpacity
+            style={styles.genreDropdownTrigger}
+            onPress={() => setGenreMenuOpen((prev) => !prev)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.genreDropdownText} numberOfLines={1}>
+              {allGenres.find((entry) => entry.value === genreFilter)?.label ?? t('library.genreAll')}
+            </Text>
+            <Text style={styles.genreDropdownChevron}>{genreMenuOpen ? '^' : 'v'}</Text>
+          </TouchableOpacity>
+          {genreMenuOpen && (
+            <View style={styles.genreDropdownMenu}>
+              {allGenres.map((entry) => (
+                <TouchableOpacity
+                  key={entry.value}
+                  style={[
+                    styles.genreDropdownOption,
+                    genreFilter === entry.value && styles.genreDropdownOptionActive,
+                  ]}
+                  onPress={() => {
+                    setGenreFilter(entry.value)
+                    setGenreMenuOpen(false)
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.genreDropdownOptionText,
+                      genreFilter === entry.value && styles.genreDropdownOptionTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {entry.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
       </View>
 
       {loading ? (
@@ -161,11 +323,12 @@ export default function LibraryScreen() {
         </View>
       ) : (
         <FlatList
+          key={viewMode}
           data={filtered}
           keyExtractor={(item) => item.id || item.title}
           renderItem={renderItem}
-          numColumns={2}
-          contentContainerStyle={styles.grid}
+          numColumns={viewMode === 'gallery' ? 2 : 1}
+          contentContainerStyle={viewMode === 'gallery' ? styles.grid : styles.listGrid}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -193,18 +356,126 @@ export default function LibraryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  searchBar: { padding: 12, backgroundColor: '#1e293b', borderBottomWidth: 1, borderBottomColor: '#334155' },
+  searchBar: { padding: 12, backgroundColor: '#1e293b', borderBottomWidth: 1, borderBottomColor: '#334155', gap: 10 },
+  searchInputWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
   searchInput: {
     backgroundColor: '#334155',
     color: '#fff',
     borderRadius: 8,
     paddingHorizontal: 12,
+    paddingRight: 40,
     paddingVertical: 8,
     fontSize: 15,
   },
+  clearBtn: {
+    position: 'absolute',
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#475569',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearBtnText: {
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   grid: { padding: 8 },
+  listGrid: { paddingHorizontal: 10, paddingBottom: 10 },
   count: { color: '#64748b', fontSize: 12, paddingHorizontal: 8, paddingBottom: 8 },
+  viewToggle: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    padding: 3,
+    gap: 4,
+  },
+  viewBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  viewBtnActive: {
+    backgroundColor: '#6366f1',
+  },
+  viewBtnText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  viewBtnTextActive: {
+    color: '#fff',
+  },
+  genreFilterWrap: {
+    position: 'relative',
+  },
+  genreLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  genreDropdownTrigger: {
+    minHeight: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#334155',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  genreDropdownText: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  genreDropdownChevron: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  genreDropdownMenu: {
+    position: 'absolute',
+    top: 62,
+    left: 0,
+    right: 0,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 8,
+    overflow: 'hidden',
+    zIndex: 20,
+    elevation: 8,
+  },
+  genreDropdownOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  genreDropdownOptionActive: {
+    backgroundColor: '#4338ca',
+  },
+  genreDropdownOptionText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+  },
+  genreDropdownOptionTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
   card: {
     flex: 1,
     margin: 6,
@@ -222,6 +493,37 @@ const styles = StyleSheet.create({
   cardTitle: { color: '#fff', fontSize: 12, fontWeight: '600', lineHeight: 16 },
   cardYear: { color: '#6366f1', fontSize: 11, marginTop: 2 },
   cardGenre: { color: '#64748b', fontSize: 11, marginTop: 1 },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 8,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  listCover: {
+    width: 42,
+    height: 60,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  listInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  listTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  listMeta: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 2,
+  },
   errorText: { color: '#f87171', textAlign: 'center', marginBottom: 16, lineHeight: 22 },
   settingsBtn: {
     backgroundColor: '#6366f1',

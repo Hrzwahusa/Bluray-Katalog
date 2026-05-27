@@ -25,6 +25,31 @@ Hinweise:
 - Optional konfigurierte Dienste wie Gemini oder Supabase werden nur genutzt, wenn du sie selbst einrichtest.
 - Es gibt keine Werbung und kein Tracking in der App.
 
+## 2b. English Store Description
+
+### Short Description (EN)
+Scan Blu-ray covers and manage your personal movie catalog in seconds.
+
+### Full Description (EN)
+BluRay Katalog helps you organize your physical Blu-ray collection in a clean, searchable digital library.
+
+Use your phone camera to scan covers, detect titles automatically, and fetch movie metadata from Wikidata and Wikipedia. On Android, title detection can optionally be enhanced with Gemini. You can store your catalog in your own Supabase database and keep your collection synchronized.
+
+Features:
+- Scan Blu-ray covers with the camera or select from gallery
+- Automatic title detection on Android
+- Manual title search as a fallback
+- Movie metadata from Wikidata and Wikipedia
+- Cover images from Wikimedia/Wikipedia
+- Shared catalog storage with Supabase
+- Android app built with Expo Router
+- Desktop app for Windows and Linux
+
+Notes:
+- The app is designed for private movie collections.
+- Optional services such as Gemini or Supabase are only used if you configure them.
+- No ads and no tracking.
+
 ## 3. App Icon
 
 Vorhandenes Icon verwenden:

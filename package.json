@@ -17,6 +17,7 @@
     "android:build:production:local": "npm run build:production:local --workspace=apps/android",
     "android:submit:production": "npm run submit:production --workspace=apps/android",
     "android:release:internal": "npm run release:internal --workspace=apps/android",
-    "install:all": "npm install --legacy-peer-deps"
+    "install:all": "npm install --legacy-peer-deps",
+    "metadata:backfill": "node scripts/backfill-metadata.mjs"
   }
 }

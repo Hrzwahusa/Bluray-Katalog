@@ -152,6 +152,21 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
     entityData.entities = { ...entityData.entities, ...(batchData.entities ?? {}) }
   }
 
+  // ── Schritt 2b: Referenz-Entitäten (Genre/Regie/Besetzung) für Labels laden ──
+  const metadataEntityIds = new Set<string>()
+  for (const item of items) {
+    const entity = entityData.entities?.[item.id]
+    if (!entity || entity.missing) continue
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const claims: Record<string, any[]> = entity.claims || {}
+
+    for (const id of extractEntityIdsFromClaims(claims, 'P136')) metadataEntityIds.add(id)
+    for (const id of extractEntityIdsFromClaims(claims, 'P57')) metadataEntityIds.add(id)
+    for (const id of extractEntityIdsFromClaims(claims, 'P161')) metadataEntityIds.add(id)
+  }
+
+  const metadataLabelMap = await fetchEntityLabels(Array.from(metadataEntityIds), langCode)
+
   // Film-QIDs: Spielfilm, Animationsfilm, Dokumentarfilm, Kurzfilm, …
   const filmTypeQids = new Set([
     'Q11424', 'Q93204', 'Q506240', 'Q202866', 'Q1361932', 'Q24862', 'Q29168811',
@@ -211,14 +226,24 @@ export async function searchMovieFuzzy(query: string, language = 'de'): Promise<
     const enTitle = entity.labels?.en?.value
     const originalTitle = enTitle && enTitle !== title ? enTitle : undefined
     const description = descriptionText || undefined
+    const genres = extractEntityIdsFromClaims(claims, 'P136', 6)
+      .map((id) => metadataLabelMap.get(id))
+      .filter((label): label is string => Boolean(label))
+    const cast = extractEntityIdsFromClaims(claims, 'P161', 10)
+      .map((id) => metadataLabelMap.get(id))
+      .filter((label): label is string => Boolean(label))
+    const director = extractEntityIdsFromClaims(claims, 'P57', 3)
+      .map((id) => metadataLabelMap.get(id))
+      .find((label): label is string => Boolean(label))
 
     results.push({
       wikidataId: item.id,
       title,
       originalTitle,
       year,
-      genres: [],
-      cast: [],
+      genres,
+      cast,
+      director,
       imdbId,
       runtime,
       coverUrl,
@@ -601,6 +626,63 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
     chunks.push(arr.slice(i, i + size))
   }
   return chunks
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractEntityIdsFromClaims(claims: Record<string, any[]>, propertyId: string, maxItems = 50): string[] {
+  const ids = new Set<string>()
+  const entries = claims[propertyId] || []
+
+  for (const entry of entries) {
+    const id: string | undefined = entry?.mainsnak?.datavalue?.value?.id
+    if (!id) continue
+    ids.add(id)
+    if (ids.size >= maxItems) break
+  }
+
+  return Array.from(ids)
+}
+
+async function fetchEntityLabels(entityIds: string[], langCode: string): Promise<Map<string, string>> {
+  const uniqueIds = Array.from(new Set(entityIds.filter(Boolean)))
+  if (uniqueIds.length === 0) return new Map()
+
+  const labels = new Map<string, string>()
+  const batches = chunkArray(uniqueIds, 50)
+
+  for (const batch of batches) {
+    const params = new URLSearchParams({
+      action: 'wbgetentities',
+      ids: batch.join('|'),
+      props: 'labels',
+      languages: `${langCode}|en`,
+      format: 'json',
+      origin: '*',
+    })
+
+    try {
+      const response = await fetchWithRetry(`https://www.wikidata.org/w/api.php?${params}`, {
+        headers: { 'User-Agent': 'BluRay-Katalog/1.0' },
+      })
+
+      if (!response.ok) continue
+      const data = await response.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const entities = data.entities as Record<string, any> | undefined
+      if (!entities) continue
+
+      for (const [entityId, entity] of Object.entries(entities)) {
+        const label = entity?.labels?.[langCode]?.value || entity?.labels?.en?.value
+        if (typeof label === 'string' && label.trim()) {
+          labels.set(entityId, label)
+        }
+      }
+    } catch {
+      // Label-Auflösung ist optional; bei Teilfehlern mit den übrigen Batches weitermachen.
+    }
+  }
+
+  return labels
 }
 
 function buildSearchTerms(query: string): string[] {

@@ -6,12 +6,15 @@ import { MovieCard } from '../components/MovieCard'
 import { MovieDetail } from '../components/MovieDetail'
 import { Search, Camera } from '../components/Icons'
 
+const LIBRARY_VIEW_MODE_KEY = 'libraryViewMode'
+
 interface LibraryProps {
   settings: AppSettings
   onScanClick: () => void
 }
 
 export function Library({ settings, onScanClick }: LibraryProps) {
+  const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
   const [movies, setMovies] = useState<Movie[]>([])
   const [filtered, setFiltered] = useState<Movie[]>([])
   const [query, setQuery] = useState('')
@@ -47,6 +50,17 @@ export function Library({ settings, onScanClick }: LibraryProps) {
   useEffect(() => {
     loadMovies()
   }, [loadMovies])
+
+  useEffect(() => {
+    const stored = localStorage.getItem(LIBRARY_VIEW_MODE_KEY)
+    if (stored === 'gallery' || stored === 'list') {
+      setViewMode(stored)
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem(LIBRARY_VIEW_MODE_KEY, viewMode)
+  }, [viewMode])
 
   // Suche & Filter
   useEffect(() => {
@@ -88,6 +102,19 @@ export function Library({ settings, onScanClick }: LibraryProps) {
     setSelectedMovie(updated)
   }
 
+  const handleApplyDetailFilter = (type: 'genre' | 'actor', value: string) => {
+    if (type === 'genre') {
+      setGenreFilter(value)
+      setQuery('')
+    } else {
+      setGenreFilter('Alle')
+      setQuery(value)
+    }
+    setViewMode('gallery')
+    setDeleteConfirmOpen(false)
+    setSelectedMovie(null)
+  }
+
   useEffect(() => {
     if (selectedMovie !== null || !restoreSearchFocus) return
     const id = setTimeout(() => {
@@ -110,12 +137,13 @@ export function Library({ settings, onScanClick }: LibraryProps) {
           }}
           onDelete={() => setDeleteConfirmOpen(true)}
           onSave={handleSave}
+          onApplyFilter={handleApplyDetailFilter}
         />
 
         {deleteConfirmOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 no-drag">
             <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
-              <h2 className="text-lg font-semibold text-white">Film wirklich loeschen?</h2>
+              <h2 className="text-lg font-semibold text-white">Film wirklich löschen?</h2>
               <p className="mt-2 text-sm text-slate-300">
                 Dieser Eintrag wird dauerhaft entfernt.
               </p>
@@ -132,7 +160,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
                   disabled={isDeleting}
                   className="px-3 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm transition-colors disabled:opacity-60"
                 >
-                  {isDeleting ? 'Loesche...' : 'Loeschen'}
+                  {isDeleting ? 'Lösche...' : 'Löschen'}
                 </button>
               </div>
             </div>
@@ -174,21 +202,42 @@ export function Library({ settings, onScanClick }: LibraryProps) {
           />
         </div>
 
-        {/* Genre-Filter */}
-        <div className="flex gap-2 overflow-x-auto no-drag">
-          {allGenres.slice(0, 8).map((genre) => (
-            <button
-              key={genre}
-              onClick={() => setGenreFilter(genre)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors
-                ${genreFilter === genre
-                  ? 'bg-brand-600 text-white'
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-            >
-              {genre}
-            </button>
-          ))}
+        <div className="flex items-center gap-1 rounded-lg bg-slate-900/60 border border-slate-700 p-1 no-drag">
+          <button
+            onClick={() => setViewMode('gallery')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              viewMode === 'gallery'
+                ? 'bg-brand-600 text-white'
+                : 'text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            Galerie
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              viewMode === 'list'
+                ? 'bg-brand-600 text-white'
+                : 'text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            Liste
+          </button>
+        </div>
+
+        {/* Genre-Filter als Dropdown */}
+        <div className="flex items-center gap-2 no-drag">
+          <label htmlFor="genreFilter" className="text-xs text-slate-400">Genre</label>
+          <select
+            id="genreFilter"
+            value={genreFilter}
+            onChange={(e) => setGenreFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg bg-slate-700 text-slate-100 text-sm border border-slate-600 focus:border-brand-500 focus:outline-none"
+          >
+            {allGenres.map((genre) => (
+              <option key={genre} value={genre}>{genre}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -220,7 +269,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
             }
           />
         )}
-        {!loading && filtered.length > 0 && (
+        {!loading && filtered.length > 0 && viewMode === 'gallery' && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {filtered.map((movie) => (
               <MovieCard
@@ -229,6 +278,38 @@ export function Library({ settings, onScanClick }: LibraryProps) {
                 onClick={() => setSelectedMovie(movie)}
               />
             ))}
+          </div>
+        )}
+        {!loading && filtered.length > 0 && viewMode === 'list' && (
+          <div className="flex flex-col gap-2">
+            {filtered.map((movie) => {
+              const posterUrl = movie.cover_url && !movie.cover_url.startsWith('data:') ? movie.cover_url : undefined
+              return (
+                <button
+                  key={movie.id}
+                  onClick={() => setSelectedMovie(movie)}
+                  className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800/90 hover:border-brand-500 hover:bg-slate-800 px-3 py-2 text-left transition-colors"
+                >
+                  <div className="w-12 h-16 shrink-0 rounded-md overflow-hidden bg-slate-700 flex items-center justify-center">
+                    {posterUrl ? (
+                      <img src={posterUrl} alt={movie.title} className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <span className="text-slate-500 text-lg">[]</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white font-semibold truncate">{movie.title}</p>
+                    <p className="text-xs text-slate-400 truncate">
+                      {[
+                        movie.year ? String(movie.year) : undefined,
+                        movie.director,
+                        movie.genres?.[0],
+                      ].filter(Boolean).join(' | ') || 'Keine Zusatzinfos'}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>

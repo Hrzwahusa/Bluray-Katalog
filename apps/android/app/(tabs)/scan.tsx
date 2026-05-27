@@ -24,7 +24,19 @@ const IMAGE_HEADERS = {
   Referer: 'https://en.wikipedia.org/',
 }
 
-type Step = 'camera' | 'processing' | 'search' | 'confirm' | 'saving' | 'done'
+type Step = 'camera' | 'processing' | 'search' | 'manual' | 'confirm' | 'saving' | 'done'
+
+type ManualMovieForm = {
+  title: string
+  originalTitle: string
+  year: string
+  director: string
+  genres: string
+  cast: string
+  runtime: string
+  imdbId: string
+  description: string
+}
 
 type GeminiMovieGuess = {
   title?: string
@@ -140,8 +152,31 @@ export default function ScanScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const [candidates, setCandidates] = useState<WikidataMovie[]>([])
   const [selectedMovie, setSelectedMovie] = useState<WikidataMovie | null>(null)
+  const [manualForm, setManualForm] = useState<ManualMovieForm>({
+    title: '',
+    originalTitle: '',
+    year: '',
+    director: '',
+    genres: '',
+    cast: '',
+    runtime: '',
+    imdbId: '',
+    description: '',
+  })
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  const parseCsv = (value: string): string[] => value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+
+  const parseOptionalNumber = (value: string): number | undefined => {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+    const parsed = Number(trimmed.replace(',', '.'))
+    return Number.isFinite(parsed) ? Math.round(parsed) : undefined
+  }
 
   // ── Foto aufnehmen ──────────────────────────────────────────────────
   const takePicture = useCallback(async () => {
@@ -266,12 +301,53 @@ export default function ScanScreen() {
     setStep('camera')
   }, [])
 
+  const openManualEntry = useCallback(() => {
+    setManualForm({
+      title: searchQuery.trim() || ocrText.trim(),
+      originalTitle: '',
+      year: '',
+      director: '',
+      genres: '',
+      cast: '',
+      runtime: '',
+      imdbId: '',
+      description: '',
+    })
+    setError(null)
+    setStep('manual')
+  }, [searchQuery, ocrText])
+
+  const confirmManualEntry = useCallback(() => {
+    const title = manualForm.title.trim()
+    if (!title) {
+      setError(t('scan.manualTitleRequired'))
+      return
+    }
+
+    const movie: WikidataMovie = {
+      wikidataId: `manual:${Date.now()}`,
+      title,
+      originalTitle: manualForm.originalTitle.trim() || undefined,
+      year: parseOptionalNumber(manualForm.year),
+      director: manualForm.director.trim() || undefined,
+      genres: parseCsv(manualForm.genres),
+      cast: parseCsv(manualForm.cast),
+      runtime: parseOptionalNumber(manualForm.runtime),
+      imdbId: manualForm.imdbId.trim() || undefined,
+      description: manualForm.description.trim() || undefined,
+    }
+
+    setSelectedMovie(movie)
+    setError(null)
+    setStep('confirm')
+  }, [manualForm, t])
+
   // ── Speichern ───────────────────────────────────────────────────────
   const saveSelectedMovie = async () => {
     if (!selectedMovie) return
     setStep('saving')
     try {
-      const isGeminiFallback = selectedMovie.wikidataId.startsWith('gemini:')
+      const isLocalCandidate = selectedMovie.wikidataId.startsWith('gemini:') || selectedMovie.wikidataId.startsWith('manual:')
 
       const supabaseUrl = await SecureStore.getItemAsync('supabaseUrl')
       const supabaseKey =
@@ -307,7 +383,7 @@ export default function ScanScreen() {
           director: selectedMovie.director,
           description: selectedMovie.description || wikiDetails.description,
           cover_url: selectedMovie.coverUrl || posterUrl || undefined,
-          wikidata_id: isGeminiFallback ? undefined : selectedMovie.wikidataId,
+          wikidata_id: isLocalCandidate ? undefined : selectedMovie.wikidataId,
           imdb_id: selectedMovie.imdbId,
           runtime: selectedMovie.runtime,
         },
@@ -443,6 +519,98 @@ export default function ScanScreen() {
         </TouchableOpacity>
       ))}
 
+      {step === 'search' && (
+        <TouchableOpacity
+          style={[styles.candidateCard, styles.manualCard]}
+          onPress={openManualEntry}
+        >
+          <View style={styles.candidateInfo}>
+            <Text style={styles.candidateTitle}>✍️ {t('scan.manualCardTitle')}</Text>
+            <Text style={styles.candidateMeta}>{t('scan.manualCardSubtitle')}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {step === 'manual' && (
+        <View style={styles.confirmCard}>
+          <Text style={styles.confirmTitle}>{t('scan.manualFormTitle')}</Text>
+
+          <TextInput
+            style={styles.input}
+            value={manualForm.title}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, title: value }))}
+            placeholder={t('scan.manualFieldTitle')}
+            placeholderTextColor="#64748b"
+          />
+          <TextInput
+            style={styles.input}
+            value={manualForm.originalTitle}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, originalTitle: value }))}
+            placeholder={t('scan.manualFieldOriginalTitle')}
+            placeholderTextColor="#64748b"
+          />
+          <TextInput
+            style={styles.input}
+            value={manualForm.year}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, year: value }))}
+            placeholder={t('scan.manualFieldYear')}
+            placeholderTextColor="#64748b"
+            keyboardType="number-pad"
+          />
+          <TextInput
+            style={styles.input}
+            value={manualForm.director}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, director: value }))}
+            placeholder={t('scan.manualFieldDirector')}
+            placeholderTextColor="#64748b"
+          />
+          <TextInput
+            style={styles.input}
+            value={manualForm.genres}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, genres: value }))}
+            placeholder={t('scan.manualFieldGenres')}
+            placeholderTextColor="#64748b"
+          />
+          <TextInput
+            style={styles.input}
+            value={manualForm.cast}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, cast: value }))}
+            placeholder={t('scan.manualFieldCast')}
+            placeholderTextColor="#64748b"
+          />
+          <TextInput
+            style={styles.input}
+            value={manualForm.runtime}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, runtime: value }))}
+            placeholder={t('scan.manualFieldRuntime')}
+            placeholderTextColor="#64748b"
+            keyboardType="number-pad"
+          />
+          <TextInput
+            style={styles.input}
+            value={manualForm.imdbId}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, imdbId: value }))}
+            placeholder={t('scan.manualFieldImdb')}
+            placeholderTextColor="#64748b"
+          />
+          <TextInput
+            style={[styles.input, styles.inputMultiline]}
+            value={manualForm.description}
+            onChangeText={(value) => setManualForm((prev) => ({ ...prev, description: value }))}
+            placeholder={t('scan.manualFieldDescription')}
+            placeholderTextColor="#64748b"
+            multiline
+          />
+
+          <TouchableOpacity style={[styles.btn, styles.btnGreen]} onPress={confirmManualEntry}>
+            <Text style={styles.btnText}>✓ {t('scan.manualCreateCandidate')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={() => setStep('search')}>
+            <Text style={styles.btnText}>{t('scan.back')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Bestätigungs-Schritt */}
       {step === 'confirm' && selectedMovie && (
         <View style={styles.confirmCard}>
@@ -528,6 +696,10 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     fontSize: 15,
   },
+  inputMultiline: {
+    minHeight: 90,
+    textAlignVertical: 'top',
+  },
   btn: {
     backgroundColor: '#6366f1',
     padding: 12,
@@ -543,6 +715,10 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: '#334155',
+  },
+  manualCard: {
+    borderColor: '#6366f1',
+    borderStyle: 'dashed',
   },
   candidateInfo: { gap: 3 },
   candidateTitle: { color: '#fff', fontWeight: '600', fontSize: 15 },

@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  Linking,
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
@@ -156,6 +157,30 @@ export default function MovieDetailScreen() {
     ])
   }
 
+  const buildTmdbSearchUrl = (): string => {
+    const query = movie?.title?.trim() || ''
+    return `https://www.themoviedb.org/search?query=${encodeURIComponent(query)}`
+  }
+
+  const handleOpenTmdb = async () => {
+    const url = buildTmdbSearchUrl()
+    try {
+      const canOpen = await Linking.canOpenURL(url)
+      if (!canOpen) {
+        Alert.alert(t('alert.error'), t('movie.tmdbOpenError'))
+        return
+      }
+      await Linking.openURL(url)
+    } catch {
+      Alert.alert(t('alert.error'), t('movie.tmdbOpenError'))
+    }
+  }
+
+  const applyTagFilter = (type: 'genre' | 'actor', value: string) => {
+    const encoded = encodeURIComponent(value)
+    router.push(`/?filterType=${type}&filterValue=${encoded}`)
+  }
+
   const handleSave = async () => {
     if (!movie?.id) return
     if (!form.title.trim()) {
@@ -282,9 +307,9 @@ export default function MovieDetailScreen() {
             <Section title={t('movie.genres')}>
               <View style={styles.tagRow}>
                 {movie.genres.map((g) => (
-                  <View key={g} style={styles.tag}>
+                  <TouchableOpacity key={g} style={styles.tag} onPress={() => applyTagFilter('genre', g)}>
                     <Text style={styles.tagText}>{g}</Text>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             </Section>
@@ -295,9 +320,9 @@ export default function MovieDetailScreen() {
             <Section title={t('movie.cast')}>
               <View style={styles.tagRow}>
                 {movie.cast_members.map((a) => (
-                  <View key={a} style={[styles.tag, styles.tagActor]}>
+                  <TouchableOpacity key={a} style={[styles.tag, styles.tagActor]} onPress={() => applyTagFilter('actor', a)}>
                     <Text style={styles.tagText}>{a}</Text>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             </Section>
@@ -311,6 +336,9 @@ export default function MovieDetailScreen() {
           )}
 
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
+            <TouchableOpacity style={[styles.btn, styles.btnTmdb]} onPress={handleOpenTmdb}>
+              <Text style={styles.btnText}>{t('movie.openTmdb')}</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.btn, styles.btnEdit]} onPress={() => setEditing(true)}>
               <Text style={styles.btnText}>{t('movie.edit')}</Text>
             </TouchableOpacity>
@@ -416,6 +444,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#450a0a',
     borderWidth: 1,
     borderColor: '#7f1d1d',
+  },
+  btnTmdb: {
+    backgroundColor: '#0e7490',
   },
   deleteBtnText: { color: '#fca5a5', fontWeight: '600' },
   text: { color: '#94a3b8' },

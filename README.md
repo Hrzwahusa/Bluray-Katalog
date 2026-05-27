@@ -190,14 +190,6 @@ Die zentrale Tabelle `movies` wird über [supabase/schema.sql](supabase/schema.s
 - Zugangsdaten werden lokal in den jeweiligen Apps gespeichert und nicht im Repository verwaltet.
 - Build-Artefakte, lokale SDK-Pfade und Abhängigkeiten sollten nicht versioniert werden.
 
-## Privacy Policy (Google Play)
-
-- Vorlage im Repository: `privacy-policy.html`
-- Du brauchst fuer Google Play eine oeffentlich erreichbare HTTPS-URL.
-- Schnellster Weg ohne eigene Website:
-	1. Datei `privacy-policy.html` in Google Docs kopieren.
-	2. Unter Datei > Teilen > Im Web veroeffentlichen.
-	3. Die veroeffentlichte URL in der Play Console hinterlegen.
 
 ## Lizenz
 

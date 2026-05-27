@@ -5,9 +5,11 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  KeyboardAvoidingView,
   StyleSheet,
   Alert,
   Linking,
+  Platform,
 } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
 import * as Clipboard from 'expo-clipboard'
@@ -83,96 +85,107 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
-      <Text style={styles.description}>{t('settings.languageHelp')}</Text>
-      <View style={styles.languageRow}>
-        <TouchableOpacity
-          style={[styles.langBtn, language === 'de' && styles.langBtnActive]}
-          onPress={() => setLanguage('de')}
-        >
-          <Text style={styles.langBtnText}>{t('settings.languageGerman')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
-          onPress={() => setLanguage('en')}
-        >
-          <Text style={styles.langBtnText}>{t('settings.languageEnglish')}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.sectionTitle}>{t('settings.supabaseTitle')}</Text>
-      <Text style={styles.description}>
-        {t('settings.supabaseDescription')}
-      </Text>
-
-      <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleOpenSupabaseWebsite}>
-        <Text style={styles.btnText}>{t('settings.openSupabase')}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleCopySchemaSql}>
-        <Text style={styles.btnText}>{t('settings.copySchema')}</Text>
-      </TouchableOpacity>
-
-      <View style={styles.form}>
-        <Text style={styles.label}>{t('settings.supabaseUrl')}</Text>
-        <TextInput
-          style={styles.input}
-          value={url}
-          onChangeText={setUrl}
-          placeholder="https://xxxx.supabase.co"
-          placeholderTextColor="#64748b"
-          autoCapitalize="none"
-          keyboardType="url"
-        />
-
-        <Text style={[styles.label, { marginTop: 16 }]}>{t('settings.anonKey')}</Text>
-        <TextInput
-          style={styles.input}
-          value={key}
-          onChangeText={setKey}
-          placeholder="eyJhbGci..."
-          placeholderTextColor="#64748b"
-          secureTextEntry
-          autoCapitalize="none"
-        />
-        <Text style={styles.hint}>
-          {t('settings.anonHint')}
-        </Text>
-      </View>
-
-      <Text style={[styles.sectionTitle, { marginTop: 8 }]}>{t('settings.geminiTitle')}</Text>
-      <Text style={styles.description}>
-        {t('settings.geminiDescription')}
-      </Text>
-      <View style={styles.form}>
-        <Text style={styles.label}>{t('settings.geminiKey')}</Text>
-        <TextInput
-          style={styles.input}
-          value={geminiKey}
-          onChangeText={setGeminiKey}
-          placeholder="AIzaSy..."
-          placeholderTextColor="#64748b"
-          secureTextEntry
-          autoCapitalize="none"
-        />
-        <Text style={styles.hint}>{t('settings.geminiHint')}</Text>
-      </View>
-
-      <TouchableOpacity
-        style={[styles.btn, saved && styles.btnSaved]}
-        onPress={handleSave}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 24}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        <Text style={styles.btnText}>{saved ? `✓ ${t('settings.saved')}` : t('settings.save')}</Text>
-      </TouchableOpacity>
+        <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
+        <Text style={styles.description}>{t('settings.languageHelp')}</Text>
+        <View style={styles.languageRow}>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'de' && styles.langBtnActive]}
+            onPress={() => setLanguage('de')}
+          >
+            <Text style={styles.langBtnText}>{t('settings.languageGerman')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
+            onPress={() => setLanguage('en')}
+          >
+            <Text style={styles.langBtnText}>{t('settings.languageEnglish')}</Text>
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.infoGrid}>
-        <InfoCard title="OCR" value="Gemini AI (online)" />
-        <InfoCard title={t('settings.cardMovies')} value="Wikidata" />
-        <InfoCard title={t('settings.cardCover')} value="Wikipedia API" />
-        <InfoCard title={t('settings.cardDb')} value="Supabase" />
-      </View>
-    </ScrollView>
+        <Text style={styles.sectionTitle}>{t('settings.supabaseTitle')}</Text>
+        <Text style={styles.description}>
+          {t('settings.supabaseDescription')}
+        </Text>
+
+        <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleOpenSupabaseWebsite}>
+          <Text style={styles.btnText}>{t('settings.openSupabase')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleCopySchemaSql}>
+          <Text style={styles.btnText}>{t('settings.copySchema')}</Text>
+        </TouchableOpacity>
+
+        <View style={styles.form}>
+          <Text style={styles.label}>{t('settings.supabaseUrl')}</Text>
+          <TextInput
+            style={styles.input}
+            value={url}
+            onChangeText={setUrl}
+            placeholder="https://xxxx.supabase.co"
+            placeholderTextColor="#64748b"
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
+          <Text style={[styles.label, { marginTop: 16 }]}>{t('settings.anonKey')}</Text>
+          <TextInput
+            style={styles.input}
+            value={key}
+            onChangeText={setKey}
+            placeholder="eyJhbGci..."
+            placeholderTextColor="#64748b"
+            secureTextEntry
+            autoCapitalize="none"
+          />
+          <Text style={styles.hint}>
+            {t('settings.anonHint')}
+          </Text>
+        </View>
+
+        <Text style={[styles.sectionTitle, { marginTop: 8 }]}>{t('settings.geminiTitle')}</Text>
+        <Text style={styles.description}>
+          {t('settings.geminiDescription')}
+        </Text>
+        <View style={styles.form}>
+          <Text style={styles.label}>{t('settings.geminiKey')}</Text>
+          <TextInput
+            style={styles.input}
+            value={geminiKey}
+            onChangeText={setGeminiKey}
+            placeholder="AIzaSy..."
+            placeholderTextColor="#64748b"
+            secureTextEntry
+            autoCapitalize="none"
+          />
+          <Text style={styles.hint}>{t('settings.geminiHint')}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.btn, saved && styles.btnSaved]}
+          onPress={handleSave}
+        >
+          <Text style={styles.btnText}>{saved ? `✓ ${t('settings.saved')}` : t('settings.save')}</Text>
+        </TouchableOpacity>
+
+        <View style={styles.infoGrid}>
+          <InfoCard title="OCR" value="Gemini AI (online)" />
+          <InfoCard title={t('settings.cardMovies')} value="Wikidata" />
+          <InfoCard title={t('settings.cardCover')} value="Wikipedia API" />
+          <InfoCard title={t('settings.cardDb')} value="Supabase" />
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -187,7 +200,7 @@ function InfoCard({ title, value }: { title: string; value: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  content: { padding: 16, gap: 16, paddingBottom: 40 },
+  content: { padding: 16, gap: 16, paddingBottom: 220 },
   sectionTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   description: { color: '#94a3b8', lineHeight: 20 },
   languageRow: { flexDirection: 'row', gap: 8 },

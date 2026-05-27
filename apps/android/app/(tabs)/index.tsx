@@ -264,7 +264,7 @@ export default function LibraryScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.genreFilterWrap}>
+        <View style={[styles.genreFilterWrap, genreMenuOpen && styles.genreFilterWrapOpen]}>
           <Text style={styles.genreLabel}>{t('library.genreLabel')}</Text>
           <TouchableOpacity
             style={styles.genreDropdownTrigger}
@@ -356,7 +356,15 @@ export default function LibraryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  searchBar: { padding: 12, backgroundColor: '#1e293b', borderBottomWidth: 1, borderBottomColor: '#334155', gap: 10 },
+  searchBar: {
+    padding: 12,
+    backgroundColor: '#1e293b',
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+    gap: 10,
+    zIndex: 30,
+    elevation: 12,
+  },
   searchInputWrap: {
     position: 'relative',
     justifyContent: 'center',
@@ -419,6 +427,10 @@ const styles = StyleSheet.create({
   genreFilterWrap: {
     position: 'relative',
   },
+  genreFilterWrapOpen: {
+    zIndex: 40,
+    elevation: 16,
+  },
   genreLabel: {
     color: '#94a3b8',
     fontSize: 12,
@@ -456,8 +468,8 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     borderRadius: 8,
     overflow: 'hidden',
-    zIndex: 20,
-    elevation: 8,
+    zIndex: 50,
+    elevation: 20,
   },
   genreDropdownOption: {
     paddingHorizontal: 12,

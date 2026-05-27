@@ -4,12 +4,14 @@ import {
   Text,
   Image,
   ScrollView,
+  KeyboardAvoidingView,
   TouchableOpacity,
   StyleSheet,
   Alert,
   ActivityIndicator,
   TextInput,
   Linking,
+  Platform,
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
@@ -240,20 +242,30 @@ export default function MovieDetailScreen() {
   if (!movie) return <View style={styles.center}><Text style={styles.text}>{t('movie.notFound')}</Text></View>
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {error && <Text style={styles.errorText}>{error}</Text>}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 24}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, editing && styles.contentEditing]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {error && <Text style={styles.errorText}>{error}</Text>}
 
       {/* Cover */}
-      {(editing ? form.cover_url : movie.cover_url) ? (
-        <CoverImage uri={(editing ? form.cover_url : movie.cover_url) as string} title={movie.title} />
-      ) : (
-        <View style={[styles.cover, styles.coverPlaceholder]}>
-          <Text style={{ fontSize: 48 }}>🎬</Text>
-        </View>
-      )}
+        {(editing ? form.cover_url : movie.cover_url) ? (
+          <CoverImage uri={(editing ? form.cover_url : movie.cover_url) as string} title={movie.title} />
+        ) : (
+          <View style={[styles.cover, styles.coverPlaceholder]}>
+            <Text style={{ fontSize: 48 }}>🎬</Text>
+          </View>
+        )}
 
-      {editing ? (
-        <View style={{ gap: 10 }}>
+        {editing ? (
+          <View style={{ gap: 10 }}>
           <EditField label={t('movie.titleField')} value={form.title} onChangeText={(value) => setForm((prev) => ({ ...prev, title: value }))} />
           <EditField label={t('movie.originalTitle')} value={form.original_title} onChangeText={(value) => setForm((prev) => ({ ...prev, original_title: value }))} />
           <EditField label={t('movie.year')} value={form.year} onChangeText={(value) => setForm((prev) => ({ ...prev, year: value }))} keyboardType="numeric" />
@@ -285,9 +297,9 @@ export default function MovieDetailScreen() {
               <Text style={styles.btnText}>{saving ? t('movie.saving') : t('movie.save')}</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      ) : (
-        <>
+          </View>
+        ) : (
+          <>
           {/* Titel */}
           <Text style={styles.title}>{movie.title}</Text>
           {movie.original_title && movie.original_title !== movie.title && (
@@ -346,9 +358,10 @@ export default function MovieDetailScreen() {
               <Text style={styles.deleteBtnText}>🗑 {t('movie.deleteMovie')}</Text>
             </TouchableOpacity>
           </View>
-        </>
-      )}
-    </ScrollView>
+          </>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -403,6 +416,7 @@ function MetaItem({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
   content: { padding: 16, paddingBottom: 40 },
+  contentEditing: { paddingBottom: 220 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorText: { color: '#fca5a5', backgroundColor: '#450a0a', borderColor: '#7f1d1d', borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
   cover: { width: '100%', height: 300, borderRadius: 12, backgroundColor: '#1e293b', marginBottom: 16 },

@@ -1,6 +1,6 @@
 {
   "name": "bluray-katalog",
-  "version": "1.0.3",
+  "version": "1.0.6",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -18,6 +18,10 @@
     "android:submit:production": "npm run submit:production --workspace=apps/android",
     "android:release:internal": "npm run release:internal --workspace=apps/android",
     "install:all": "npm install --legacy-peer-deps",
-    "metadata:backfill": "node scripts/backfill-metadata.mjs"
+    "metadata:backfill": "node scripts/backfill-metadata.mjs",
+    "version:patch": "node scripts/bump-version.mjs --patch",
+    "version:minor": "node scripts/bump-version.mjs --minor",
+    "version:major": "node scripts/bump-version.mjs --major",
+    "version:set": "node scripts/bump-version.mjs --set"
   }
 }

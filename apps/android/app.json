@@ -13,18 +13,20 @@
       "backgroundColor": "#1e1b4b"
     },
     "android": {
-      "versionCode": 6,
+      "versionCode": 7,
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1e1b4b"
       },
       "package": "com.bluraykatalog",
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.INTERNET",
-        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
     },

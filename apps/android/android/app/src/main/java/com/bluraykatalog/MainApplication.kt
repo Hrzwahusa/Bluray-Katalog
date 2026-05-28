@@ -12,33 +12,35 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
+import expo.modules.ExpoReactHostFactory
 
 import expo.modules.ApplicationLifecycleDispatcher
-import expo.modules.ReactNativeHostWrapper
 
 class MainApplication : Application(), ReactApplication {
 
-  override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
-        this,
-        object : DefaultReactNativeHost(this) {
-          override fun getPackages(): List<ReactPackage> {
-            val packages = PackageList(this).packages
-            // Packages that cannot be autolinked yet can be added manually here, for example:
-            // packages.add(new MyReactNativePackage());
-            return packages
-          }
+  override val reactNativeHost: ReactNativeHost =
+      object : DefaultReactNativeHost(this) {
+        override fun getPackages(): List<ReactPackage> {
+          val packages = PackageList(this).packages
+          return packages
+        }
 
-          override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
+        override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
 
-          override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
+        override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
 
-          override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
-          override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
+        override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+        override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
       }
-  )
 
   override val reactHost: ReactHost
-    get() = ReactNativeHostWrapper.createReactHost(applicationContext, reactNativeHost)
+    get() = ExpoReactHostFactory.getDefaultReactHost(
+      context = applicationContext,
+      packageList = PackageList(this).packages,
+      jsMainModulePath = ".expo/.virtual-metro-entry",
+      jsBundleAssetPath = "index.android.bundle",
+      useDevSupport = BuildConfig.DEBUG
+    )
 
   override fun onCreate() {
     super.onCreate()

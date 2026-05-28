@@ -1,7 +1,13 @@
 pluginManagement {
     includeBuild(new File(["node", "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().toString())
+    includeBuild(new File(["node", "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().toString() + "/android/expo-gradle-plugin")
 }
-plugins { id("com.facebook.react.settings") }
+plugins {
+  id("expo-autolinking-settings")
+  id("com.facebook.react.settings")
+}
+
+expoAutolinking.useExpoModules()
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
@@ -21,7 +27,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   }
 }
 
-rootProject.name = 'BluRayKatalog'
+rootProject.name = 'BluRay Katalog'
 
 dependencyResolutionManagement {
   versionCatalogs {
@@ -30,9 +36,6 @@ dependencyResolutionManagement {
     }
   }
 }
-
-apply from: new File(["node", "--print", "require.resolve('expo/package.json')"].execute(null, rootDir).text.trim(), "../scripts/autolinking.gradle");
-useExpoModules()
 
 include ':app'
 includeBuild(new File(["node", "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile())

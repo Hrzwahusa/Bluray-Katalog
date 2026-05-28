@@ -116,6 +116,8 @@ Das erzeugte AAB liegt danach unter:
 apps/android/android/app/build/outputs/bundle/release/app-release.aab
 ```
 
+Die Play-Console-Versionshinweise werden dabei aus [apps/android/play-store-release-notes.txt](apps/android/play-store-release-notes.txt) übernommen und als Kopie neben dem Bundle abgelegt.
+
 ## Releases
 
 - Desktop-Pakete lassen sich mit `npm run desktop:package` erzeugen.

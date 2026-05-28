@@ -19,11 +19,6 @@ import { saveMovie } from '@bluray-katalog/shared'
 import type { WikidataMovie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
 
-const IMAGE_HEADERS = {
-  'User-Agent': 'BluRay-Katalog/1.0',
-  Referer: 'https://en.wikipedia.org/',
-}
-
 type Step = 'camera' | 'processing' | 'search' | 'manual' | 'confirm' | 'saving' | 'done'
 
 type ManualMovieForm = {
@@ -456,7 +451,7 @@ export default function ScanScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       {/* Vorschaubild NUR wenn Wikidata-Cover vorhanden */}
       {selectedMovie?.coverUrl && step === 'confirm' && (
-        <Image source={{ uri: selectedMovie.coverUrl, headers: IMAGE_HEADERS }} style={styles.preview} resizeMode="contain" />
+        <Image source={{ uri: selectedMovie.coverUrl }} style={styles.preview} resizeMode="contain" />
       )}
 
       {/* Status / Loader */}

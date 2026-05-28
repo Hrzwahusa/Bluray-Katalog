@@ -8,9 +8,10 @@
     "android": "npx expo run:android",
     "build": "npx eas-cli build --platform android",
     "build:production": "npx eas-cli build --platform android --profile production",
-    "build:production:local": "cd android && gradlew.bat bundleRelease",
+    "build:production:local": "cd android && gradlew.bat bundleRelease && node ../../../scripts/sync-play-store-release-notes.mjs",
     "submit:production": "npx eas-cli submit --platform android --profile production",
     "release:internal": "npm run build:production && npm run submit:production",
+    "eas-build-on-success": "node ../../scripts/sync-play-store-release-notes.mjs",
     "ios": "expo run:ios"
   },
   "dependencies": {

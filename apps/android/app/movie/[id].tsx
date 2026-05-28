@@ -24,13 +24,12 @@ import {
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
 
-const IMAGE_HEADERS = {
-  'User-Agent': 'BluRay-Katalog/1.0',
-  Referer: 'https://en.wikipedia.org/',
-}
-
 function CoverImage({ uri, title }: { uri: string; title: string }) {
   const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [uri])
 
   if (failed) {
     return (
@@ -42,7 +41,7 @@ function CoverImage({ uri, title }: { uri: string; title: string }) {
 
   return (
     <Image
-      source={{ uri, headers: IMAGE_HEADERS }}
+      source={{ uri }}
       style={styles.cover}
       resizeMode="contain"
       onError={() => setFailed(true)}

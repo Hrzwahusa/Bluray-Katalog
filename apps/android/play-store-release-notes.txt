@@ -1,0 +1,8 @@
+<de-DE>
+• Galerie zeigt jetzt auch bei größeren Sammlungen wieder alle Vorschaubilder korrekt an.
+• Verbesserte Auflösung von Wikimedia-Bild-URLs für zuverlässigeres Laden von Coverbildern.
+</de-DE>
+<en-US>
+• The gallery now shows all thumbnail images correctly again, even for larger collections.
+• Improved Wikimedia image URL resolution for more reliable cover loading.
+</en-US>

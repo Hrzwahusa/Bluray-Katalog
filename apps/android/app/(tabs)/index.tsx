@@ -16,15 +16,15 @@ import { getAllMovies, resolveWikimediaImageUrls } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
 
-const IMAGE_HEADERS = {
-  'User-Agent': 'BluRay-Katalog/1.0',
-  Referer: 'https://en.wikipedia.org/',
-}
-
 const LIBRARY_VIEW_MODE_KEY = 'libraryViewMode'
 
 function CoverImage({ uri, title, style }: { uri: string; title: string; style: object }) {
   const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    // FlatList reuses cells; reset image state whenever a different URI is rendered.
+    setFailed(false)
+  }, [uri])
 
   if (failed) {
     return (
@@ -36,7 +36,7 @@ function CoverImage({ uri, title, style }: { uri: string; title: string; style: 
 
   return (
     <Image
-      source={{ uri, headers: IMAGE_HEADERS }}
+      source={{ uri }}
       style={style}
       resizeMode="cover"
       onError={() => setFailed(true)}

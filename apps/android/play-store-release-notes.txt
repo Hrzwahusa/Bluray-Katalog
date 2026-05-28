@@ -1,8 +1,12 @@
 <de-DE>
-• Galerie zeigt jetzt auch bei größeren Sammlungen wieder alle Vorschaubilder korrekt an.
-• Verbesserte Auflösung von Wikimedia-Bild-URLs für zuverlässigeres Laden von Coverbildern.
+• Metadaten und Cover-Suche wurden auf TMDB umgestellt (inkl. aktuellerer Treffer).
+• TMDB-Attribution mit korrektem farbigem TMDB-Logo in Einstellungen, Filmdetails und Scan-Ansicht.
+• Verbesserter Scan-Flow mit klarerer TMDB-Rueckmeldung bei Suche und Detailabruf.
+• Technisches Release-Update: Android versionCode auf 10 erhoeht.
 </de-DE>
 <en-US>
-• The gallery now shows all thumbnail images correctly again, even for larger collections.
-• Improved Wikimedia image URL resolution for more reliable cover loading.
+• Metadata and cover lookup now use TMDB (including more up-to-date search matches).
+• TMDB attribution now includes the correct colored TMDB logo in Settings, Movie Details, and Scan view.
+• Improved scan flow with clearer TMDB status feedback during search and detail loading.
+• Technical release update: Android versionCode increased to 10.
 </en-US>

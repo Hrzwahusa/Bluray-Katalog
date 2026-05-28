@@ -3,7 +3,7 @@
     "name": "BluRay Katalog",
     "slug": "bluray-katalog",
     "version": "1.0.7",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "scheme": "bluray-katalog",
     "userInterfaceStyle": "dark",

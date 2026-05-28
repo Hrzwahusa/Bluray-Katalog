@@ -1,9 +1,11 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import type { AppSettings } from '../App'
 import type { WikidataMovie } from '@shared/types'
+import { TMDB_ATTRIBUTION_NOTICE } from '@shared/wikidata'
 
 import { saveMovie } from '@shared/supabase'
 import { Camera, X, Check, Loader, AlertCircle, Search } from '../components/Icons'
+import tmdbLogo from '../assets/tmdb-logo.svg'
 
 interface ScanProps {
   settings: AppSettings
@@ -246,7 +248,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const doSearch = async (query: string, geminiGuessFromCall?: GeminiMovieGuess | null) => {
     if (!query.trim()) return
     try {
-      setStatusMessage('Suche in Wikidata...')
+      setStatusMessage('Suche in TMDB...')
       setCandidates([])
       const results = await window.api.searchMovies(query.trim())
       if (results.length > 0) {
@@ -336,7 +338,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
       const options: CoverOption[] = []
       const wikidataCover = normalizeCoverUrl(movie.coverUrl)
       if (wikidataCover) {
-        options.push({ id: 'wikidata', label: 'Wikidata-Bild', url: wikidataCover })
+        options.push({ id: 'tmdb', label: 'TMDB-Bild', url: wikidataCover })
       }
 
       const geminiCover = normalizeCoverUrl(geminiGuess?.coverImageUrl)
@@ -376,12 +378,12 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const confirmAndSave = async () => {
     if (!selectedMovie) return
     setStep('saving')
-    setStatusMessage('Hole Wikipedia-Details...')
+    setStatusMessage('Hole TMDB-Details...')
 
     try {
       const isLocalCandidate = selectedMovie.wikidataId.startsWith('gemini:') || selectedMovie.wikidataId.startsWith('manual:')
 
-      // Zusätzliche Details von Wikipedia
+      // Zusätzliche Details von TMDB
       const wikiDetails = await window.api.getWikipediaDetails(selectedMovie.title, 'de')
 
       setStatusMessage('Speichere in Datenbank...')
@@ -573,6 +575,10 @@ export function Scan({ settings, onSuccess }: ScanProps) {
             {/* Ergebnisliste */}
             {candidates.length > 0 && (
               <div className="space-y-2">
+                <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-3">
+                  <img src={tmdbLogo} alt="TMDB" className="h-6 w-auto" />
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">{TMDB_ATTRIBUTION_NOTICE}</p>
+                </div>
                 <p className="text-slate-400 text-sm">{candidates.length} Treffer – bitte den richtigen Film auswählen:</p>
                 {candidates.map((movie) => (
                   <button

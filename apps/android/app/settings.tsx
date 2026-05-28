@@ -16,6 +16,8 @@ import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
 import { useI18n } from '../lib/i18n'
 import { SUPABASE_SCHEMA_SQL } from '../lib/schema-sql'
+import { TMDB_ATTRIBUTION_NOTICE } from '@bluray-katalog/shared'
+import { TmdbLogo } from '../lib/tmdb-logo'
 
 export default function SettingsScreen() {
   const { language, setLanguage, t } = useI18n()
@@ -180,9 +182,15 @@ export default function SettingsScreen() {
 
         <View style={styles.infoGrid}>
           <InfoCard title="OCR" value="Gemini AI (online)" />
-          <InfoCard title={t('settings.cardMovies')} value="Wikidata" />
-          <InfoCard title={t('settings.cardCover')} value="Wikipedia API" />
+          <InfoCard title={t('settings.cardMovies')} value="TMDB" />
+          <InfoCard title={t('settings.cardCover')} value="TMDB Images" />
           <InfoCard title={t('settings.cardDb')} value="Supabase" />
+        </View>
+
+        <View style={styles.attributionBox}>
+          <TmdbLogo width={110} height={22} />
+          <Text style={styles.attributionTitle}>TMDB Attribution</Text>
+          <Text style={styles.attributionText}>{TMDB_ATTRIBUTION_NOTICE}</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -250,4 +258,14 @@ const styles = StyleSheet.create({
   },
   infoLabel: { color: '#64748b', fontSize: 11, marginBottom: 2 },
   infoValue: { color: '#e2e8f0', fontSize: 12, fontWeight: '500' },
+  attributionBox: {
+    backgroundColor: '#111827',
+    borderColor: '#334155',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 4,
+  },
+  attributionTitle: { color: '#cbd5e1', fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  attributionText: { color: '#94a3b8', lineHeight: 18, fontSize: 12 },
 })

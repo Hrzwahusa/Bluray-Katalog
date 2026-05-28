@@ -9,12 +9,12 @@ contextBridge.exposeInMainWorld('api', {
   // OCR: Bild → Text
   recognizeText: (imageBase64: string) => ipcRenderer.invoke('ocr:recognize', imageBase64),
 
-  // Wikidata-Suche (läuft im Main-Prozess, kein CORS-Problem)
-  searchMovies: (query: string, language?: string) => ipcRenderer.invoke('wikidata:search', query, language),
+  // TMDB-Suche (läuft im Main-Prozess, kein CORS-Problem)
+  searchMovies: (query: string, language?: string) => ipcRenderer.invoke('tmdb:search', query, language),
   getWikipediaDetails: (title: string, language: string) =>
-    ipcRenderer.invoke('wikidata:details', title, language),
+    ipcRenderer.invoke('tmdb:details', title, language),
   searchMoviePoster: (title: string, year?: number, originalTitle?: string) =>
-    ipcRenderer.invoke('wikidata:poster', title, year, originalTitle),
+    ipcRenderer.invoke('tmdb:poster', title, year, originalTitle),
 })
 
 // TypeScript-Typen für window.api

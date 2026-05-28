@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import type { AppSettings } from '../App'
 import { Check, AlertCircle } from '../components/Icons'
+import { TMDB_ATTRIBUTION_NOTICE } from '@shared/wikidata'
+import tmdbLogo from '../assets/tmdb-logo.svg'
 
 interface SettingsProps {
   initialSettings: AppSettings
@@ -181,9 +183,18 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
             <h2 className="text-lg font-semibold text-white">Über die App</h2>
             <div className="grid grid-cols-2 gap-3">
               <InfoCard title="KI-Erkennung" value={geminiKey ? 'Google Gemini 1.5 Flash' : 'Tesseract.js (Fallback)'} />
-              <InfoCard title="Filmdaten" value="Wikidata SPARQL (kostenlos)" />
-              <InfoCard title="Coverbilder" value="Wikipedia API (kostenlos)" />
+              <InfoCard title="Filmdaten" value="TMDB API" />
+              <InfoCard title="Coverbilder" value="TMDB Images" />
               <InfoCard title="Datenbank" value="Supabase PostgreSQL" />
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
+              <img
+                src={tmdbLogo}
+                alt="TMDB"
+                className="h-8 w-auto"
+              />
+              <div className="text-slate-300 text-sm font-semibold mb-2">TMDB Attribution</div>
+              <div className="text-slate-500 text-sm leading-6">{TMDB_ATTRIBUTION_NOTICE}</div>
             </div>
           </section>
         </div>

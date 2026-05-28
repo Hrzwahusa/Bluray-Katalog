@@ -230,16 +230,16 @@ ipcMain.handle('ocr:recognize', async (_, imageBase64: string) => {
   }
 })
 
-// ─── IPC Handler: Wikidata-Suche ────────────────────────────────────
-ipcMain.handle('wikidata:search', async (_, query: string, language?: string) => {
+// ─── IPC Handler: TMDB-Suche ────────────────────────────────────────
+ipcMain.handle('tmdb:search', async (_, query: string, language?: string) => {
   return await searchMovieFuzzy(query, language ?? 'de')
 })
 
-ipcMain.handle('wikidata:details', async (_, title: string, language: string) => {
+ipcMain.handle('tmdb:details', async (_, title: string, language: string) => {
   return await getWikipediaDetails(title, language)
 })
 
-ipcMain.handle('wikidata:poster', async (_, title: string, year?: number, originalTitle?: string) => {
+ipcMain.handle('tmdb:poster', async (_, title: string, year?: number, originalTitle?: string) => {
   const label = originalTitle && originalTitle !== title ? `${originalTitle} / ${title}` : title
   console.log('[Poster] Suche Poster für:', label, year)
   const url = await withTimeout(

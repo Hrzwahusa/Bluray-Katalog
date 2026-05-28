@@ -1,14 +1,13 @@
 # BluRay Katalog
 
-Desktop- und Android-App zur Verwaltung einer privaten Blu-ray-Sammlung mit Scan-Workflow, automatischer Titelerkennung, Wikidata-Metadaten und gemeinsamer Supabase-Datenbank.
+Desktop- und Android-App zur Verwaltung einer privaten Blu-ray-Sammlung mit Scan-Workflow, automatischer Titelerkennung, TMDB-Metadaten und gemeinsamer Supabase-Datenbank.
 
 ## Features
 
 - Cover per Kamera oder Galerie erfassen
 - Automatische Titelerkennung mit Gemini auf Android
 - Desktop-OCR mit Gemini als Primärweg und Tesseract.js als Fallback
-- Filmdaten aus Wikidata und Wikipedia ohne eigenen Backend-Server
-- Coverbilder über Wikipedia/Wikimedia
+- Filmdaten und Coverbilder über TMDB ohne eigenen Backend-Server
 - Gemeinsame Film-Datenbank über Supabase
 - Electron-Desktop-App für Windows und Linux
 - Expo-basierte Android-App mit Expo Router
@@ -166,7 +165,7 @@ Hinweise:
 | Desktop | Electron, React, Vite |
 | Android | Expo, React Native, Expo Router |
 | OCR / Erkennung | Gemini, Tesseract.js |
-| Filmdaten | Wikidata, Wikipedia |
+| Filmdaten | TMDB |
 | Datenbank | Supabase |
 | Shared Code | TypeScript Workspace-Paket |
 
@@ -183,7 +182,7 @@ Die zentrale Tabelle `movies` wird über [supabase/schema.sql](supabase/schema.s
 - `description`
 - `cover_url`
 - `bluray_photo_url`
-- `wikidata_id`
+- `wikidata_id` (TMDB-ID)
 - `imdb_id`
 - `runtime`
 

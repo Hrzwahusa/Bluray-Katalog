@@ -14,10 +14,16 @@ import { CameraView, useCameraPermissions } from 'expo-camera'
 import * as ImagePicker from 'expo-image-picker'
 import * as SecureStore from 'expo-secure-store'
 import { router } from 'expo-router'
-import { searchMovieFuzzy, getWikipediaDetails, searchMoviePoster } from '@bluray-katalog/shared'
-import { saveMovie } from '@bluray-katalog/shared'
+import {
+  searchMovieFuzzy,
+  getWikipediaDetails,
+  searchMoviePoster,
+  saveMovie,
+  TMDB_ATTRIBUTION_NOTICE,
+} from '@bluray-katalog/shared'
 import type { WikidataMovie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
+import { TmdbLogo } from '../../lib/tmdb-logo'
 
 type Step = 'camera' | 'processing' | 'search' | 'manual' | 'confirm' | 'saving' | 'done'
 
@@ -492,6 +498,11 @@ export default function ScanScreen() {
           >
             <Text style={styles.btnText}>🔍 {t('scan.searchButton')}</Text>
           </TouchableOpacity>
+
+          <View style={styles.tmdbAttributionSearch}>
+            <TmdbLogo width={104} height={20} />
+            <Text style={styles.tmdbAttributionText}>{TMDB_ATTRIBUTION_NOTICE}</Text>
+          </View>
         </View>
       )}
 
@@ -609,6 +620,7 @@ export default function ScanScreen() {
       {/* Bestätigungs-Schritt */}
       {step === 'confirm' && selectedMovie && (
         <View style={styles.confirmCard}>
+          <TmdbLogo width={104} height={20} />
           <Text style={styles.confirmTitle}>{selectedMovie.title}</Text>
           {selectedMovie.year && <Text style={styles.confirmMeta}>{t('scan.confirmYear', { value: selectedMovie.year })}</Text>}
           {selectedMovie.director && <Text style={styles.confirmMeta}>{t('scan.confirmDirector', { value: selectedMovie.director })}</Text>}
@@ -618,6 +630,7 @@ export default function ScanScreen() {
           <TouchableOpacity style={[styles.btn, styles.btnGreen]} onPress={saveSelectedMovie}>
             <Text style={styles.btnText}>✓ {t('scan.saveSelected')}</Text>
           </TouchableOpacity>
+          <Text style={styles.tmdbAttributionText}>{TMDB_ATTRIBUTION_NOTICE}</Text>
           <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={() => setStep('search')}>
             <Text style={styles.btnText}>{t('scan.back')}</Text>
           </TouchableOpacity>
@@ -681,6 +694,15 @@ const styles = StyleSheet.create({
   statusText: { color: '#94a3b8' },
   errorText: { color: '#f87171', padding: 12, backgroundColor: '#450a0a', borderRadius: 8 },
   searchSection: { gap: 8 },
+  tmdbAttributionSearch: {
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+  },
+  tmdbAttributionText: { color: '#94a3b8', fontSize: 11, lineHeight: 16 },
   input: {
     backgroundColor: '#1e293b',
     color: '#fff',

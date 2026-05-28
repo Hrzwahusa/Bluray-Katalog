@@ -20,9 +20,11 @@ import {
   deleteMovie,
   resolveWikimediaImageUrls,
   updateMovie,
+  TMDB_ATTRIBUTION_NOTICE,
 } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
+import { TmdbLogo } from '../../lib/tmdb-logo'
 
 function CoverImage({ uri, title }: { uri: string; title: string }) {
   const [failed, setFailed] = useState(false)
@@ -357,6 +359,11 @@ export default function MovieDetailScreen() {
               <Text style={styles.deleteBtnText}>🗑 {t('movie.deleteMovie')}</Text>
             </TouchableOpacity>
           </View>
+
+          <View style={styles.attributionLogoWrap}>
+            <TmdbLogo width={110} height={22} />
+          </View>
+          <Text style={styles.attributionText}>{TMDB_ATTRIBUTION_NOTICE}</Text>
           </>
         )}
       </ScrollView>
@@ -463,4 +470,6 @@ const styles = StyleSheet.create({
   },
   deleteBtnText: { color: '#fca5a5', fontWeight: '600' },
   text: { color: '#94a3b8' },
+  attributionLogoWrap: { marginTop: 14 },
+  attributionText: { color: '#64748b', fontSize: 11, lineHeight: 16, marginTop: 14 },
 })

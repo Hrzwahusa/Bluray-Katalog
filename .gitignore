@@ -19,3 +19,4 @@ local.properties
 *.pem
 *.p12
 .npmrc
+tmdbapi.txt

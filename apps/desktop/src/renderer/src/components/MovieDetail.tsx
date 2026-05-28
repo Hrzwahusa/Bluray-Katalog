@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import type { Movie } from '@shared/types'
 import { ChevronLeft, Trash } from './Icons'
+import { TMDB_ATTRIBUTION_NOTICE } from '@shared/wikidata'
+import tmdbLogo from '../assets/tmdb-logo.svg'
 
 interface MovieDetailProps {
   movie: Movie
@@ -221,7 +223,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
                   <Field label="Bewertung" value={form.rating} onChange={(v) => updateField('rating', v)} />
                   <Field label="Sprache" value={form.language} onChange={(v) => updateField('language', v)} />
                   <Field label="IMDb-ID" value={form.imdb_id} onChange={(v) => updateField('imdb_id', v)} />
-                  <Field label="Wikidata-ID" value={form.wikidata_id} onChange={(v) => updateField('wikidata_id', v)} />
+                  <Field label="TMDB-ID" value={form.wikidata_id} onChange={(v) => updateField('wikidata_id', v)} />
                 </div>
                 <Field label="Cover-URL" value={form.cover_url} onChange={(v) => updateField('cover_url', v)} />
                 <Field label="Foto-URL (lokal)" value={form.bluray_photo_url} onChange={(v) => updateField('bluray_photo_url', v)} />
@@ -299,6 +301,14 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
                   >
                     Auf TMDB öffnen
                   </button>
+                  <img
+                    src={tmdbLogo}
+                    alt="TMDB"
+                    className="mt-3 h-7 w-auto"
+                  />
+                  <p className="mt-3 max-w-2xl text-xs leading-relaxed text-slate-500">
+                    {TMDB_ATTRIBUTION_NOTICE}
+                  </p>
                 </div>
               </>
             )}

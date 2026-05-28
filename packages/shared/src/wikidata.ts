@@ -541,38 +541,40 @@ export async function resolveWikimediaImageUrls(urls: string[], width = 300): Pr
 async function resolveCommonsFileNames(fileNames: string[], width: number): Promise<Map<string, string>> {
   const normalizedFileNames = Array.from(new Set(fileNames.map(normalizeWikimediaFileName).filter(Boolean)))
   if (normalizedFileNames.length === 0) return new Map()
-
-  const params = new URLSearchParams({
-    action: 'query',
-    titles: normalizedFileNames.map((fileName) => `File:${fileName}`).join('|'),
-    prop: 'imageinfo',
-    iiprop: 'url|mime',
-    iiurlwidth: width.toString(),
-    format: 'json',
-    origin: '*',
-  })
-
-  const response = await fetchWithRetry(`https://commons.wikimedia.org/w/api.php?${params}`, {
-    headers: { 'User-Agent': 'BluRay-Katalog/1.0' },
-  })
-
-  if (!response.ok) return new Map()
-
-  const data = await response.json()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pages = Object.values(data.query?.pages ?? {}) as any[]
   const resolved = new Map<string, string>()
 
-  for (const page of pages) {
-    const title: string | undefined = page.title
-    const info = page.imageinfo?.[0]
-    if (!title || !info) continue
+  for (const batch of chunkArray(normalizedFileNames, 20)) {
+    const params = new URLSearchParams({
+      action: 'query',
+      titles: batch.map((fileName) => `File:${fileName}`).join('|'),
+      prop: 'imageinfo',
+      iiprop: 'url|mime',
+      iiurlwidth: width.toString(),
+      format: 'json',
+      origin: '*',
+    })
 
-    const mime: string = info.mime ?? ''
-    if (!mime.startsWith('image/') || mime === 'image/svg+xml') continue
+    const response = await fetchWithRetry(`https://commons.wikimedia.org/w/api.php?${params}`, {
+      headers: { 'User-Agent': 'BluRay-Katalog/1.0' },
+    })
 
-    const fileName = title.replace(/^File:/i, '')
-    resolved.set(toWikimediaFileKey(fileName), normalizeHttpUrl(info.thumburl ?? info.url))
+    if (!response.ok) continue
+
+    const data = await response.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pages = Object.values(data.query?.pages ?? {}) as any[]
+
+    for (const page of pages) {
+      const title: string | undefined = page.title
+      const info = page.imageinfo?.[0]
+      if (!title || !info) continue
+
+      const mime: string = info.mime ?? ''
+      if (!mime.startsWith('image/') || mime === 'image/svg+xml') continue
+
+      const fileName = title.replace(/^File:/i, '')
+      resolved.set(toWikimediaFileKey(fileName), normalizeHttpUrl(info.thumburl ?? info.url))
+    }
   }
 
   return resolved

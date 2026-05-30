@@ -1,14 +1,12 @@
 <de-DE>
-• Bibliothek aktualisiert sich jetzt sofort nach Hinzufuegen oder Loeschen von Filmen.
-• Detailansicht stabilisiert: kein endloser Ladebildschirm mehr beim Oeffnen eines Films.
-• Cover-Anzeige und Start-Laden der lokalen Datenbank in der Bibliothek verbessert.
-• Sync-/Refresh-Flow robust gemacht, inkl. besserer Fehlerbehandlung bei problematischen Daten.
+• Lokal-first Ansatz: Filme werden immer zuerst lokal auf dem Geraet gespeichert.
+• Optionaler Supabase-Sync: Nur wenn Supabase URL + Key gesetzt sind, wird zusaetzlich mit Supabase synchronisiert.
+• Ohne Supabase-Zugangsdaten bleibt die App voll lokal nutzbar.
 • Technisches Release-Update: App-Version 1.1.0, Android versionCode auf 12 erhoeht.
 </de-DE>
 <en-US>
-• Library now refreshes immediately after adding or deleting movies.
-• Movie detail screen stabilized: no more endless loading when opening a movie.
-• Improved cover rendering and startup loading of the local movie database in library.
-• Sync/refresh flow hardened with better fallback handling for problematic data.
+• Local-first approach: movies are always stored locally on device first.
+• Optional Supabase sync: synchronization only runs when Supabase URL + key are configured.
+• Without Supabase credentials, the app remains fully usable in local-only mode.
 • Technical release update: app version 1.1.0, Android versionCode increased to 12.
 </en-US>

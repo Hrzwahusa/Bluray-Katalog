@@ -1,6 +1,8 @@
 # BluRay Katalog
 
-Desktop- und Android-App zur Verwaltung einer privaten Blu-ray-Sammlung mit Scan-Workflow, automatischer Titelerkennung, TMDB-Metadaten und gemeinsamer Supabase-Datenbank.
+Desktop- und Android-App zur Verwaltung einer privaten Blu-ray-Sammlung mit Scan-Workflow, automatischer Titelerkennung und TMDB-Metadaten.
+
+Die App arbeitet lokal-first: Filme werden immer lokal gespeichert. Supabase ist optional und wird nur genutzt, wenn URL + Key in den Einstellungen hinterlegt sind.
 
 ## Features
 
@@ -8,7 +10,8 @@ Desktop- und Android-App zur Verwaltung einer privaten Blu-ray-Sammlung mit Scan
 - Automatische Titelerkennung mit Gemini auf Android
 - Desktop-OCR mit Gemini als Primärweg und Tesseract.js als Fallback
 - Filmdaten und Coverbilder über TMDB ohne eigenen Backend-Server
-- Gemeinsame Film-Datenbank über Supabase
+- Lokal-first Speicherung auf dem Gerät
+- Optionaler Supabase-Sync (bei konfigurierter URL + Key)
 - Electron-Desktop-App für Windows und Linux
 - Expo-basierte Android-App mit Expo Router
 
@@ -31,9 +34,9 @@ Desktop- und Android-App zur Verwaltung einer privaten Blu-ray-Sammlung mit Scan
 
 - Node.js 20+
 - npm
-- Supabase-Projekt
 - Für Android: Android Studio bzw. Android SDK und ein verbundenes Gerät oder Emulator
 - Optional: Gemini API-Key für die automatische Titelerkennung
+- Optional: Supabase-Projekt für Geräte-übergreifende Synchronisierung
 
 ## Setup
 
@@ -43,12 +46,14 @@ Desktop- und Android-App zur Verwaltung einer privaten Blu-ray-Sammlung mit Scan
 npm install --legacy-peer-deps
 ```
 
-### 2. Supabase einrichten
+### 2. Optional: Supabase einrichten
 
 1. Auf supabase.com ein neues Projekt anlegen.
 2. Im SQL Editor den Inhalt aus [supabase/schema.sql](supabase/schema.sql) ausführen.
 3. Unter Project Settings > API die Projekt-URL und den `anon`-Key kopieren.
 4. Diese Werte später in der Desktop- bzw. Android-App unter Einstellungen eintragen.
+
+Ohne eingetragene Supabase-Zugangsdaten bleibt die App vollständig lokal nutzbar.
 
 ### 3. Optional: Gemini konfigurieren
 
@@ -122,6 +127,24 @@ Die Play-Console-Versionshinweise werden dabei aus [apps/android/play-store-rele
 - Desktop-Pakete lassen sich mit `npm run desktop:package` erzeugen.
 - Android-Builds lassen sich mit EAS über `eas build --platform android` erzeugen.
 - Für GitHub Releases empfiehlt sich, die erzeugten Desktop-Artefakte oder Android-Builds erst nach einem verifizierten Tag hochzuladen und nicht im Repository selbst zu versionieren.
+
+### GitHub Release (ohne AAB)
+
+Für GitHub Releases nur die APK hochladen. Die AAB ist für die Play Console gedacht.
+
+```bash
+cd apps/android/android
+./gradlew.bat --no-daemon assembleRelease bundleRelease
+
+cd ../..
+gh release create v1.1.0 \
+	--title "v1.1.0" \
+	--notes-file apps/android/play-store-release-notes.txt \
+	apps/android/android/app/build/outputs/apk/release/app-release.apk
+```
+
+- APK (GitHub Release): `apps/android/android/app/build/outputs/apk/release/app-release.apk`
+- AAB (nur Play Console): `apps/android/android/app/build/outputs/bundle/release/app-release.aab`
 
 ### Google Play (Android)
 

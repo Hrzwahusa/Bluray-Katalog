@@ -431,10 +431,11 @@ export default function LibraryScreen() {
           keyExtractor={(item) => item.id || item.title}
           renderItem={renderItem}
           numColumns={viewMode === 'gallery' ? 2 : 1}
-          initialNumToRender={6}
-          maxToRenderPerBatch={6}
-          windowSize={5}
-          removeClippedSubviews
+          initialNumToRender={Math.min(filtered.length || 0, 120)}
+          maxToRenderPerBatch={80}
+          updateCellsBatchingPeriod={10}
+          windowSize={21}
+          removeClippedSubviews={false}
           contentContainerStyle={viewMode === 'gallery' ? styles.grid : styles.listGrid}
           refreshControl={
             <RefreshControl

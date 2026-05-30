@@ -16,6 +16,7 @@ import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
 import { useI18n } from '../lib/i18n'
 import { SUPABASE_SCHEMA_SQL } from '../lib/schema-sql'
+import { syncStoredMoviesNow } from '../lib/movie-store'
 import { TMDB_ATTRIBUTION_NOTICE } from '@bluray-katalog/shared'
 import { TmdbLogo } from '../lib/tmdb-logo'
 
@@ -26,6 +27,7 @@ export default function SettingsScreen() {
   const [key, setKey] = useState('')
   const [geminiKey, setGeminiKey] = useState('')
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -42,25 +44,50 @@ export default function SettingsScreen() {
   }, [])
 
   const handleSave = async () => {
-    if (!url.trim() || !key.trim()) {
-      Alert.alert(t('alert.error'), t('alert.fillBothFields'))
+    if (saving) return
+
+    const trimmedUrl = url.trim()
+    const trimmedKey = key.trim()
+
+    if (trimmedUrl && !trimmedKey) {
+      Alert.alert(t('alert.error'), t('settings.keyRequiredWhenUrl'))
       return
     }
-    if (!url.startsWith('https://')) {
+    if (trimmedKey && !trimmedUrl) {
+      Alert.alert(t('alert.error'), t('settings.urlRequiredWhenKey'))
+      return
+    }
+    if (trimmedUrl && !trimmedUrl.startsWith('https://')) {
       Alert.alert(t('alert.error'), t('alert.urlMustHttps'))
       return
     }
-    await SecureStore.setItemAsync('supabaseUrl', url.trim())
-    await SecureStore.setItemAsync('supabaseKey', key.trim())
-    await SecureStore.setItemAsync('supabaseAnonKey', key.trim())
-    if (geminiKey.trim()) {
-      await SecureStore.setItemAsync('geminiKey', geminiKey.trim())
+    setSaving(true)
+    try {
+      await SecureStore.setItemAsync('supabaseUrl', trimmedUrl)
+      await SecureStore.setItemAsync('supabaseKey', trimmedKey)
+      await SecureStore.setItemAsync('supabaseAnonKey', trimmedKey)
+
+      if (geminiKey.trim()) {
+        await SecureStore.setItemAsync('geminiKey', geminiKey.trim())
+      } else {
+        await SecureStore.deleteItemAsync('geminiKey')
+      }
+
+      // Run initial sync in background so settings save stays responsive.
+      if (trimmedUrl && trimmedKey) {
+        syncStoredMoviesNow().catch((error) => {
+          console.warn('Initial Supabase sync after saving settings failed:', error)
+        })
+      }
+
+      setSaved(true)
+      setTimeout(() => {
+        setSaved(false)
+        router.back()
+      }, 1200)
+    } finally {
+      setSaving(false)
     }
-    setSaved(true)
-    setTimeout(() => {
-      setSaved(false)
-      router.back()
-    }, 1500)
   }
 
   const handleCopySchemaSql = async () => {
@@ -153,6 +180,9 @@ export default function SettingsScreen() {
           <Text style={styles.hint}>
             {t('settings.anonHint')}
           </Text>
+          <Text style={styles.hint}>
+            {t('settings.supabaseOptionalHint')}
+          </Text>
         </View>
 
         <Text style={[styles.sectionTitle, { marginTop: 8 }]}>{t('settings.geminiTitle')}</Text>
@@ -174,17 +204,20 @@ export default function SettingsScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.btn, saved && styles.btnSaved]}
+          style={[styles.btn, saved && styles.btnSaved, saving && styles.btnDisabled]}
           onPress={handleSave}
+          disabled={saving}
         >
-          <Text style={styles.btnText}>{saved ? `✓ ${t('settings.saved')}` : t('settings.save')}</Text>
+          <Text style={styles.btnText}>
+            {saved ? `✓ ${t('settings.saved')}` : saving ? t('movie.saving') : t('settings.save')}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.infoGrid}>
           <InfoCard title="OCR" value="Gemini AI (online)" />
           <InfoCard title={t('settings.cardMovies')} value="TMDB" />
           <InfoCard title={t('settings.cardCover')} value="TMDB Images" />
-          <InfoCard title={t('settings.cardDb')} value="Supabase" />
+          <InfoCard title={t('settings.cardDb')} value={t('settings.cardDbValue')} />
         </View>
 
         <View style={styles.attributionBox}>
@@ -245,6 +278,7 @@ const styles = StyleSheet.create({
   },
   btnSecondary: { backgroundColor: '#334155' },
   btnSaved: { backgroundColor: '#16a34a' },
+  btnDisabled: { opacity: 0.7 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   infoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   infoCard: {

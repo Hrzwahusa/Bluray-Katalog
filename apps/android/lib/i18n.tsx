@@ -25,6 +25,7 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'library.clearSearch': 'Suche leeren',
     'library.genreLabel': 'Genre',
     'library.genreAll': 'Alle Genres',
+    'library.syncing': 'Synchronisiere mit Supabase...',
 
     'scan.cameraError': 'Kamerafehler: {message}',
     'scan.ocrRunning': 'Titelerkennung läuft...',
@@ -74,8 +75,8 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'settings.languageHelp': 'Wähle die App-Sprache.',
     'settings.languageGerman': 'Deutsch',
     'settings.languageEnglish': 'English',
-    'settings.supabaseTitle': 'Supabase Datenbank',
-    'settings.supabaseDescription': 'Kostenloses Konto auf supabase.com erstellen, SQL-Schema aus supabase/schema.sql ausführen und Zugangsdaten eingeben.',
+    'settings.supabaseTitle': 'Supabase Sync',
+    'settings.supabaseDescription': 'Die App speichert Filme immer lokal auf dem Geraet. Wenn du hier Supabase-Zugangsdaten eintraegst, wird der lokale Katalog zusaetzlich mit Supabase synchronisiert.',
     'settings.openSupabase': 'Supabase im Browser öffnen',
     'settings.openSupabaseError': 'Supabase-Link konnte nicht geöffnet werden.',
     'settings.copySchema': 'schema.sql in Zwischenablage kopieren',
@@ -84,6 +85,9 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'settings.supabaseUrl': 'Supabase URL',
     'settings.anonKey': 'Anon (Public) Key',
     'settings.anonHint': 'Zu finden unter: Dashboard -> Project Settings -> API -> anon (public)',
+    'settings.supabaseOptionalHint': 'Leer lassen fuer rein lokale Nutzung. Sobald URL und Key gesetzt sind, werden lokale Filme nach Supabase gespiegelt und Remote-Filme lokal uebernommen.',
+    'settings.urlRequiredWhenKey': 'Bitte auch die Supabase-URL eintragen.',
+    'settings.keyRequiredWhenUrl': 'Bitte auch den Supabase-Key eintragen.',
     'settings.geminiTitle': 'KI-Titelerkennung (Gemini)',
     'settings.geminiDescription': 'Kostenlosen API-Schlüssel auf aistudio.google.com erstellen (15 Anfragen/Minute gratis). Ohne Key wird der Filmtitel manuell eingegeben.',
     'settings.geminiKey': 'Gemini API Key',
@@ -93,6 +97,7 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'settings.cardMovies': 'Filmdaten',
     'settings.cardCover': 'Cover',
     'settings.cardDb': 'Datenbank',
+    'settings.cardDbValue': 'Lokal + Supabase Sync',
 
     'alert.error': 'Fehler',
     'alert.fillBothFields': 'Bitte beide Felder ausfüllen.',
@@ -147,6 +152,7 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'library.clearSearch': 'Clear search',
     'library.genreLabel': 'Genre',
     'library.genreAll': 'All genres',
+    'library.syncing': 'Syncing with Supabase...',
 
     'scan.cameraError': 'Camera error: {message}',
     'scan.ocrRunning': 'Recognizing title...',
@@ -196,8 +202,8 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'settings.languageHelp': 'Choose the app language.',
     'settings.languageGerman': 'Deutsch',
     'settings.languageEnglish': 'English',
-    'settings.supabaseTitle': 'Supabase database',
-    'settings.supabaseDescription': 'Create a free account on supabase.com, execute the SQL schema from supabase/schema.sql, then enter your credentials.',
+    'settings.supabaseTitle': 'Supabase sync',
+    'settings.supabaseDescription': 'The app always stores movies locally on the device. If you add Supabase credentials here, the local catalog will also sync with Supabase.',
     'settings.openSupabase': 'Open Supabase in browser',
     'settings.openSupabaseError': 'Could not open the Supabase link.',
     'settings.copySchema': 'Copy schema.sql to clipboard',
@@ -206,6 +212,9 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'settings.supabaseUrl': 'Supabase URL',
     'settings.anonKey': 'Anon (Public) Key',
     'settings.anonHint': 'Find it at: Dashboard -> Project Settings -> API -> anon (public)',
+    'settings.supabaseOptionalHint': 'Leave both fields empty for local-only usage. As soon as URL and key are set, local movies are mirrored to Supabase and remote movies are pulled back locally.',
+    'settings.urlRequiredWhenKey': 'Please enter the Supabase URL as well.',
+    'settings.keyRequiredWhenUrl': 'Please enter the Supabase key as well.',
     'settings.geminiTitle': 'AI title recognition (Gemini)',
     'settings.geminiDescription': 'Create a free API key on aistudio.google.com (15 req/min free). Without a key, movie titles are entered manually.',
     'settings.geminiKey': 'Gemini API Key',
@@ -215,6 +224,7 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'settings.cardMovies': 'Movie data',
     'settings.cardCover': 'Cover',
     'settings.cardDb': 'Database',
+    'settings.cardDbValue': 'Local + Supabase sync',
 
     'alert.error': 'Error',
     'alert.fillBothFields': 'Please fill in both fields.',
@@ -277,7 +287,7 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null)
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<AppLanguage>('de')
+  const [language, setLanguageState] = useState<AppLanguage>('en')
 
   useEffect(() => {
     let mounted = true

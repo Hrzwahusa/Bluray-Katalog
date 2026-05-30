@@ -3,6 +3,7 @@ import { Library } from './pages/Library'
 import { Scan } from './pages/Scan'
 import { Settings } from './pages/Settings'
 import { Film, Camera, Settings as SettingsIcon } from './components/Icons'
+import { I18nProvider, type AppLanguage, useI18n } from './i18n'
 
 export type Page = 'library' | 'scan' | 'settings'
 
@@ -10,11 +11,12 @@ export interface AppSettings {
   supabaseUrl: string
   supabaseKey: string
   geminiKey: string
+  language: AppLanguage
 }
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('library')
-  const [settings, setSettings] = useState<AppSettings>({ supabaseUrl: '', supabaseKey: '', geminiKey: '' })
+  const [settings, setSettings] = useState<AppSettings>({ supabaseUrl: '', supabaseKey: '', geminiKey: '', language: 'en' })
   const [settingsLoaded, setSettingsLoaded] = useState(false)
 
   useEffect(() => {
@@ -28,10 +30,6 @@ export default function App() {
     window.api.getSettings().then((s: AppSettings) => {
       setSettings(s)
       setSettingsLoaded(true)
-      // Wenn keine Einstellungen vorhanden → direkt zur Settings-Seite
-      if (!s.supabaseUrl || !s.supabaseKey) {
-        setCurrentPage('settings')
-      }
     }).catch((err: unknown) => {
       console.error('getSettings fehlgeschlagen:', err)
       setSettingsLoaded(true)
@@ -45,13 +43,45 @@ export default function App() {
     setCurrentPage('library')
   }
 
+  const handleLanguagePreview = (language: AppLanguage) => {
+    setSettings((prev) => ({ ...prev, language }))
+  }
+
   if (!settingsLoaded) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-900">
-        <div className="text-slate-400">Lade...</div>
+        <div className="text-slate-400">Loading...</div>
       </div>
     )
   }
+
+  return (
+    <I18nProvider language={settings.language}>
+      <AppShell
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        settings={settings}
+        onSaveSettings={handleSettingsSave}
+        onLanguagePreview={handleLanguagePreview}
+      />
+    </I18nProvider>
+  )
+}
+
+function AppShell({
+  currentPage,
+  onPageChange,
+  settings,
+  onSaveSettings,
+  onLanguagePreview,
+}: {
+  currentPage: Page
+  onPageChange: (page: Page) => void
+  settings: AppSettings
+  onSaveSettings: (settings: AppSettings) => Promise<void>
+  onLanguagePreview: (language: AppLanguage) => void
+}) {
+  const { t } = useI18n()
 
   return (
     <div className="flex flex-col h-screen bg-slate-900">
@@ -61,7 +91,7 @@ export default function App() {
           <div className="w-5 h-5 text-brand-500">
             <Film />
           </div>
-          <span className="text-sm font-semibold text-white tracking-wide">BluRay Katalog</span>
+          <span className="text-sm font-semibold text-white tracking-wide">{t('app.title')}</span>
         </div>
       </div>
 
@@ -72,24 +102,23 @@ export default function App() {
           <div className="flex-1 py-4 space-y-1">
             <NavButton
               icon={<Film />}
-              label="Bibliothek"
+              label={t('nav.library')}
               active={currentPage === 'library'}
-              onClick={() => setCurrentPage('library')}
+              onClick={() => onPageChange('library')}
             />
             <NavButton
               icon={<Camera />}
-              label="Cover scannen"
+              label={t('nav.scan')}
               active={currentPage === 'scan'}
-              onClick={() => setCurrentPage('scan')}
-              disabled={!settings.supabaseUrl}
+              onClick={() => onPageChange('scan')}
             />
           </div>
           <div className="border-t border-slate-700 py-4">
             <NavButton
               icon={<SettingsIcon />}
-              label="Einstellungen"
+              label={t('nav.settings')}
               active={currentPage === 'settings'}
-              onClick={() => setCurrentPage('settings')}
+              onClick={() => onPageChange('settings')}
             />
           </div>
         </nav>
@@ -97,13 +126,13 @@ export default function App() {
         {/* Seiteninhalt */}
         <main className="flex-1 overflow-hidden">
           {currentPage === 'library' && (
-            <Library settings={settings} onScanClick={() => setCurrentPage('scan')} />
+            <Library settings={settings} onScanClick={() => onPageChange('scan')} />
           )}
           {currentPage === 'scan' && (
-            <Scan settings={settings} onSuccess={() => setCurrentPage('library')} />
+            <Scan settings={settings} onSuccess={() => onPageChange('library')} />
           )}
           {currentPage === 'settings' && (
-            <Settings initialSettings={settings} onSave={handleSettingsSave} />
+            <Settings initialSettings={settings} onSave={onSaveSettings} onLanguageChange={onLanguagePreview} />
           )}
         </main>
       </div>

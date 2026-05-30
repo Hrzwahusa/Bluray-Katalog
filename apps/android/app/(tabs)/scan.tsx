@@ -18,12 +18,12 @@ import {
   searchMovieFuzzy,
   getWikipediaDetails,
   searchMoviePoster,
-  saveMovie,
   TMDB_ATTRIBUTION_NOTICE,
 } from '@bluray-katalog/shared'
 import type { WikidataMovie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
 import { TmdbLogo } from '../../lib/tmdb-logo'
+import { saveStoredMovie } from '../../lib/movie-store'
 
 type Step = 'camera' | 'processing' | 'search' | 'manual' | 'confirm' | 'saving' | 'done'
 
@@ -350,16 +350,6 @@ export default function ScanScreen() {
     try {
       const isLocalCandidate = selectedMovie.wikidataId.startsWith('gemini:') || selectedMovie.wikidataId.startsWith('manual:')
 
-      const supabaseUrl = await SecureStore.getItemAsync('supabaseUrl')
-      const supabaseKey =
-        (await SecureStore.getItemAsync('supabaseKey')) ||
-        (await SecureStore.getItemAsync('supabaseAnonKey'))
-      if (!supabaseUrl || !supabaseKey) {
-        Alert.alert(t('alert.error'), t('scan.missingSupabase'))
-        setStep('confirm')
-        return
-      }
-
       setStatus(t('scan.fetchWiki'))
       const wikiDetails = await getWikipediaDetails(selectedMovie.title, 'de')
 
@@ -374,7 +364,7 @@ export default function ScanScreen() {
       }
 
       setStatus(t('scan.saving'))
-      await saveMovie(
+      await saveStoredMovie(
         {
           title: selectedMovie.title,
           original_title: selectedMovie.originalTitle,
@@ -387,9 +377,7 @@ export default function ScanScreen() {
           wikidata_id: isLocalCandidate ? undefined : selectedMovie.wikidataId,
           imdb_id: selectedMovie.imdbId,
           runtime: selectedMovie.runtime,
-        },
-        supabaseUrl,
-        supabaseKey
+        }
       )
       setStep('done')
     } catch (e) {
@@ -647,7 +635,7 @@ export default function ScanScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.btn, styles.btnSecondary]}
-            onPress={() => router.push('/')}
+            onPress={() => router.replace(`/?refreshKey=${Date.now()}`)}
           >
             <Text style={styles.btnText}>{t('scan.toLibrary')}</Text>
           </TouchableOpacity>

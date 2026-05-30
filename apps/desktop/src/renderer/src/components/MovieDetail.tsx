@@ -3,6 +3,7 @@ import type { Movie } from '@shared/types'
 import { ChevronLeft, Trash } from './Icons'
 import { TMDB_ATTRIBUTION_NOTICE } from '@shared/wikidata'
 import tmdbLogo from '../assets/tmdb-logo.svg'
+import { useI18n } from '../i18n'
 
 interface MovieDetailProps {
   movie: Movie
@@ -74,6 +75,7 @@ function buildTmdbSearchUrl(movie: Movie): string {
 }
 
 export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: MovieDetailProps) {
+  const { language, t } = useI18n()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -97,11 +99,11 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
 
   const handleSave = async () => {
     if (!movie.id) {
-      setSaveError('Film kann nicht gespeichert werden: ID fehlt.')
+      setSaveError(t('movie.errorMissingId'))
       return
     }
     if (!form.title.trim()) {
-      setSaveError('Der Titel darf nicht leer sein.')
+      setSaveError(t('movie.errorEmptyTitle'))
       return
     }
 
@@ -148,7 +150,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
           className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm"
         >
           <span className="w-4 h-4"><ChevronLeft /></span>
-          Zurück
+          {t('movie.back')}
         </button>
         <h1 className="flex-1 text-xl font-bold text-white truncate">{movie.title}</h1>
         {isEditing ? (
@@ -158,14 +160,14 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
               disabled={isSaving}
               className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors disabled:opacity-60"
             >
-              Abbrechen
+              {t('movie.cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving}
               className="px-3 py-2 bg-green-700 hover:bg-green-600 text-white rounded-lg text-sm transition-colors disabled:opacity-60"
             >
-              {isSaving ? 'Speichere...' : 'Speichern'}
+              {isSaving ? t('movie.saving') : t('movie.save')}
             </button>
           </>
         ) : (
@@ -173,7 +175,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
             onClick={() => setIsEditing(true)}
             className="px-3 py-2 bg-brand-700 hover:bg-brand-600 text-white rounded-lg text-sm transition-colors"
           >
-            Bearbeiten
+            {t('movie.edit')}
           </button>
         )}
         <button
@@ -181,7 +183,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
           className="flex items-center gap-2 px-3 py-2 bg-red-900/40 hover:bg-red-800/60 text-red-400 hover:text-red-300 rounded-lg text-sm transition-colors"
         >
           <span className="w-4 h-4"><Trash /></span>
-          Löschen
+          {t('movie.delete')}
         </button>
       </div>
 
@@ -204,7 +206,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
               />
             ) : (
               <div className="w-full aspect-[2/3] bg-slate-800 rounded-xl flex items-center justify-center text-slate-600">
-                Kein Cover
+                {t('movie.noCover')}
               </div>
             )}
 
@@ -214,22 +216,22 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
           <div className="flex-1 space-y-6">
             {isEditing ? (
               <div className="space-y-4">
-                <Field label="Titel" value={form.title} onChange={(v) => updateField('title', v)} required />
-                <Field label="Originaltitel" value={form.original_title} onChange={(v) => updateField('original_title', v)} />
+                <Field label={t('movie.fieldTitle')} value={form.title} onChange={(v) => updateField('title', v)} required />
+                <Field label={t('movie.fieldOriginalTitle')} value={form.original_title} onChange={(v) => updateField('original_title', v)} />
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Jahr" value={form.year} onChange={(v) => updateField('year', v)} />
-                  <Field label="Regie" value={form.director} onChange={(v) => updateField('director', v)} />
-                  <Field label="Laufzeit (Minuten)" value={form.runtime} onChange={(v) => updateField('runtime', v)} />
-                  <Field label="Bewertung" value={form.rating} onChange={(v) => updateField('rating', v)} />
-                  <Field label="Sprache" value={form.language} onChange={(v) => updateField('language', v)} />
-                  <Field label="IMDb-ID" value={form.imdb_id} onChange={(v) => updateField('imdb_id', v)} />
-                  <Field label="TMDB-ID" value={form.wikidata_id} onChange={(v) => updateField('wikidata_id', v)} />
+                  <Field label={t('movie.fieldYear')} value={form.year} onChange={(v) => updateField('year', v)} />
+                  <Field label={t('movie.fieldDirector')} value={form.director} onChange={(v) => updateField('director', v)} />
+                  <Field label={t('movie.fieldRuntime')} value={form.runtime} onChange={(v) => updateField('runtime', v)} />
+                  <Field label={t('movie.fieldRating')} value={form.rating} onChange={(v) => updateField('rating', v)} />
+                  <Field label={t('movie.fieldLanguage')} value={form.language} onChange={(v) => updateField('language', v)} />
+                  <Field label={t('movie.fieldImdb')} value={form.imdb_id} onChange={(v) => updateField('imdb_id', v)} />
+                  <Field label={t('movie.fieldTmdb')} value={form.wikidata_id} onChange={(v) => updateField('wikidata_id', v)} />
                 </div>
-                <Field label="Cover-URL" value={form.cover_url} onChange={(v) => updateField('cover_url', v)} />
-                <Field label="Foto-URL (lokal)" value={form.bluray_photo_url} onChange={(v) => updateField('bluray_photo_url', v)} />
-                <Field label="Genres (kommagetrennt)" value={form.genres} onChange={(v) => updateField('genres', v)} />
-                <Field label="Darsteller (kommagetrennt)" value={form.cast_members} onChange={(v) => updateField('cast_members', v)} />
-                <Field label="Beschreibung" value={form.description} onChange={(v) => updateField('description', v)} multiline />
+                <Field label={t('movie.fieldCoverUrl')} value={form.cover_url} onChange={(v) => updateField('cover_url', v)} />
+                <Field label={t('movie.fieldPhotoUrl')} value={form.bluray_photo_url} onChange={(v) => updateField('bluray_photo_url', v)} />
+                <Field label={t('movie.fieldGenres')} value={form.genres} onChange={(v) => updateField('genres', v)} />
+                <Field label={t('movie.fieldCast')} value={form.cast_members} onChange={(v) => updateField('cast_members', v)} />
+                <Field label={t('movie.fieldDescription')} value={form.description} onChange={(v) => updateField('description', v)} multiline />
               </div>
             ) : (
               <>
@@ -242,18 +244,18 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
 
                 {/* Metadaten-Grid */}
                 <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-                  <MetaRow label="Erscheinungsjahr" value={movie.year?.toString()} />
-                  <MetaRow label="Regie" value={movie.director} />
-                  <MetaRow label="Laufzeit" value={movie.runtime ? `${movie.runtime} Minuten` : undefined} />
-                  <MetaRow label="Bewertung" value={movie.rating ? `${movie.rating}/10` : undefined} />
-                  <MetaRow label="Sprache" value={movie.language} />
+                  <MetaRow label={t('movie.metaYear')} value={movie.year?.toString()} />
+                  <MetaRow label={t('movie.metaDirector')} value={movie.director} />
+                  <MetaRow label={t('movie.metaRuntime')} value={movie.runtime ? t('movie.metaRuntimeValue', { value: movie.runtime }) : undefined} />
+                  <MetaRow label={t('movie.metaRating')} value={movie.rating ? t('movie.metaRatingValue', { value: movie.rating }) : undefined} />
+                  <MetaRow label={t('movie.metaLanguage')} value={movie.language} />
                   <MetaRow label="IMDb-ID" value={movie.imdb_id} />
                 </div>
 
                 {/* Genres */}
                 {movie.genres && movie.genres.length > 0 && (
                   <div>
-                    <h3 className="text-slate-500 text-sm font-medium mb-2">Genres</h3>
+                    <h3 className="text-slate-500 text-sm font-medium mb-2">{t('movie.metaGenres')}</h3>
                     <div className="flex flex-wrap gap-2">
                       {movie.genres.map((g) => (
                         <button
@@ -271,7 +273,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
                 {/* Hauptdarsteller */}
                 {movie.cast_members && movie.cast_members.length > 0 && (
                   <div>
-                    <h3 className="text-slate-500 text-sm font-medium mb-2">Hauptdarsteller</h3>
+                    <h3 className="text-slate-500 text-sm font-medium mb-2">{t('movie.metaCast')}</h3>
                     <div className="flex flex-wrap gap-2">
                       {movie.cast_members.map((actor) => (
                         <button
@@ -289,7 +291,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
                 {/* Beschreibung */}
                 {movie.description && (
                   <div>
-                    <h3 className="text-slate-500 text-sm font-medium mb-2">Beschreibung</h3>
+                    <h3 className="text-slate-500 text-sm font-medium mb-2">{t('movie.metaDescription')}</h3>
                     <p className="text-slate-300 text-sm leading-relaxed">{movie.description}</p>
                   </div>
                 )}
@@ -299,7 +301,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
                     onClick={() => window.open(buildTmdbSearchUrl(movie), '_blank', 'noopener,noreferrer')}
                     className="px-3 py-2 bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg text-sm transition-colors"
                   >
-                    Auf TMDB öffnen
+                    {t('movie.openTmdb')}
                   </button>
                   <img
                     src={tmdbLogo}
@@ -316,7 +318,7 @@ export function MovieDetail({ movie, onBack, onDelete, onSave, onApplyFilter }: 
             {/* Zeitstempel */}
             {movie.created_at && (
               <p className="text-slate-600 text-xs">
-                Hinzugefügt: {new Date(movie.created_at).toLocaleDateString('de-DE', { dateStyle: 'long' })}
+                {t('movie.added', { value: new Date(movie.created_at).toLocaleDateString(language === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'long' }) })}
               </p>
             )}
           </div>

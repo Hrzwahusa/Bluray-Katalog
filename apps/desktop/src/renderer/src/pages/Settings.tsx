@@ -3,33 +3,49 @@ import type { AppSettings } from '../App'
 import { Check, AlertCircle } from '../components/Icons'
 import { TMDB_ATTRIBUTION_NOTICE } from '@shared/wikidata'
 import tmdbLogo from '../assets/tmdb-logo.svg'
+import { useI18n } from '../i18n'
 
 interface SettingsProps {
   initialSettings: AppSettings
   onSave: (settings: AppSettings) => Promise<void>
+  onLanguageChange?: (language: AppSettings['language']) => void
 }
 
-export function Settings({ initialSettings, onSave }: SettingsProps) {
+export function Settings({ initialSettings, onSave, onLanguageChange }: SettingsProps) {
+  const { t } = useI18n()
   const [url, setUrl] = useState(initialSettings.supabaseUrl)
   const [key, setKey] = useState(initialSettings.supabaseKey)
   const [geminiKey, setGeminiKey] = useState(initialSettings.geminiKey)
+  const [language, setLanguage] = useState(initialSettings.language)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const handleSelectLanguage = (nextLanguage: AppSettings['language']) => {
+    setLanguage(nextLanguage)
+    onLanguageChange?.(nextLanguage)
+  }
+
   const handleSave = async () => {
-    if (!url.trim() || !key.trim()) {
-      setError('Bitte Supabase-URL und API-Key ausfüllen.')
+    const trimmedUrl = url.trim()
+    const trimmedKey = key.trim()
+
+    if (trimmedUrl && !trimmedKey) {
+      setError(t('settings.error.missingKey'))
       return
     }
-    if (!url.startsWith('https://')) {
-      setError('Supabase-URL muss mit https:// beginnen.')
+    if (trimmedKey && !trimmedUrl) {
+      setError(t('settings.error.missingUrl'))
+      return
+    }
+    if (trimmedUrl && !trimmedUrl.startsWith('https://')) {
+      setError(t('settings.error.invalidUrl'))
       return
     }
     setSaving(true)
     setError(null)
     try {
-      await onSave({ supabaseUrl: url.trim(), supabaseKey: key.trim(), geminiKey: geminiKey.trim() })
+      await onSave({ supabaseUrl: trimmedUrl, supabaseKey: trimmedKey, geminiKey: geminiKey.trim(), language })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e) {
@@ -42,30 +58,51 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-6 py-4 border-b border-slate-700 bg-slate-800 shrink-0">
-        <h1 className="text-xl font-bold text-white">Einstellungen</h1>
+        <h1 className="text-xl font-bold text-white">{t('settings.title')}</h1>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-xl space-y-8">
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold text-white">{t('settings.language')}</h2>
+              <p className="text-slate-400 text-sm mt-1">{t('settings.languageHelp')}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleSelectLanguage('de')}
+                className={`rounded-lg border px-4 py-2.5 text-sm transition-colors ${language === 'de' ? 'border-brand-500 bg-brand-900 text-white' : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+              >
+                {t('settings.languageGerman')}
+              </button>
+              <button
+                onClick={() => handleSelectLanguage('en')}
+                className={`rounded-lg border px-4 py-2.5 text-sm transition-colors ${language === 'en' ? 'border-brand-500 bg-brand-900 text-white' : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+              >
+                {t('settings.languageEnglish')}
+              </button>
+            </div>
+          </section>
+
           {/* Gemini API – Titelkennnung */}
           <section className="space-y-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">KI-Texterkennung (Gemini)</h2>
+              <h2 className="text-lg font-semibold text-white">{t('settings.geminiTitle')}</h2>
               <p className="text-slate-400 text-sm mt-1">
-                Kostenloser API-Key von{' '}
+                {t('settings.geminiDescription').split('aistudio.google.com')[0]}
                 <a
                   href="https://aistudio.google.com/app/apikey"
                   className="text-brand-400 hover:underline"
                   onClick={(e) => { e.preventDefault(); window.open('https://aistudio.google.com/app/apikey') }}
                 >
                   aistudio.google.com
-                </a>{' '}
-                – kein Kreditkarte nötig. Erkennt Filmtitel auf Covern viel zuverlässiger als klassisches OCR. Ohne Key wird Tesseract als Fallback genutzt.
+                </a>
+                {t('settings.geminiDescription').split('aistudio.google.com')[1]}
               </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                Gemini API-Key <span className="text-slate-500 font-normal">(optional)</span>
+                {t('settings.geminiKey')} <span className="text-slate-500 font-normal">(optional)</span>
               </label>
               <input
                 type="password"
@@ -75,7 +112,7 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
                 className="w-full px-4 py-2.5 bg-slate-700 text-white placeholder-slate-500 rounded-lg border border-slate-600 focus:border-brand-500 focus:outline-none font-mono text-sm"
               />
               <p className="text-slate-500 text-xs mt-1">
-                Kostenlos: 15 Anfragen/Minute, 1.500 Anfragen/Tag (Gemini 1.5 Flash)
+                {t('settings.geminiRateLimit')}
               </p>
             </div>
           </section>
@@ -83,9 +120,9 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
           {/* Supabase-Konfiguration */}
           <section className="space-y-4">
             <div>
-              <h2 className="text-lg font-semibold text-white">Datenbank (Supabase)</h2>
+              <h2 className="text-lg font-semibold text-white">{t('settings.syncTitle')}</h2>
               <p className="text-slate-400 text-sm mt-1">
-                Kostenloses Hosting auf{' '}
+                {t('settings.syncDescription').split('supabase.com')[0]}
                 <a
                   href="https://supabase.com"
                   className="text-brand-400 hover:underline"
@@ -95,16 +132,15 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
                   }}
                 >
                   supabase.com
-                </a>{' '}
-                – kein Kreditkarte erforderlich. Projekt anlegen, SQL-Schema ausführen und die
-                Zugangsdaten hier eintragen.
+                </a>
+                {t('settings.syncDescription').split('supabase.com')[1]}
               </p>
             </div>
 
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Supabase URL
+                  {t('settings.supabaseUrl')}
                 </label>
                 <input
                   type="url"
@@ -116,17 +152,20 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Anon (Public) API-Key
+                  {t('settings.supabaseKey')}
                 </label>
                 <input
                   type="password"
                   value={key}
                   onChange={(e) => setKey(e.target.value)}
-                  placeholder="Supabase anon key hier einfügen"
+                  placeholder={t('settings.supabaseKeyPlaceholder')}
                   className="w-full px-4 py-2.5 bg-slate-700 text-white placeholder-slate-500 rounded-lg border border-slate-600 focus:border-brand-500 focus:outline-none font-mono text-sm"
                 />
                 <p className="text-slate-500 text-xs mt-1">
-                  Zu finden unter: Supabase Dashboard → Project Settings → API → anon (public)
+                  {t('settings.supabaseKeyHint')}
+                </p>
+                <p className="text-slate-500 text-xs mt-1">
+                  {t('settings.supabaseOptionalHint')}
                 </p>
               </div>
             </div>
@@ -134,16 +173,16 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
 
           {/* Schema-Hinweis */}
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-white">Datenbank-Schema einrichten</h2>
+            <h2 className="text-lg font-semibold text-white">{t('settings.schemaTitle')}</h2>
             <div className="p-4 bg-slate-800 rounded-xl border border-slate-700 text-sm text-slate-300 space-y-2">
-              <p>1. Supabase-Projekt anlegen (kostenlos auf supabase.com)</p>
-              <p>2. Im Dashboard: <span className="font-mono bg-slate-700 px-1 rounded">SQL Editor</span> öffnen</p>
+              <p>{t('settings.schemaStep1')}</p>
+              <p>{t('settings.schemaStep2').replace('SQL Editor', '')}<span className="font-mono bg-slate-700 px-1 rounded">SQL Editor</span>{t('settings.schemaStep2').endsWith('open SQL Editor') ? '' : ' öffnen'}</p>
               <p>
-                3. Inhalt der Datei{' '}
+                {t('settings.schemaStep3a')}{' '}
                 <span className="font-mono bg-slate-700 px-1 rounded">supabase/schema.sql</span>{' '}
-                einfügen und ausführen
+                {t('settings.schemaStep3b')}
               </p>
-              <p>4. URL und API-Key oben eintragen und speichern</p>
+              <p>{t('settings.schemaStep4')}</p>
             </div>
           </section>
 
@@ -169,23 +208,23 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
             {saved ? (
               <>
                 <span className="w-4 h-4"><Check /></span>
-                Gespeichert!
+                {t('settings.saved')}
               </>
             ) : saving ? (
-              'Speichere...'
+              t('settings.saving')
             ) : (
-              'Einstellungen speichern'
+              t('settings.save')
             )}
           </button>
 
           {/* Info-Box */}
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-white">Über die App</h2>
+            <h2 className="text-lg font-semibold text-white">{t('settings.aboutTitle')}</h2>
             <div className="grid grid-cols-2 gap-3">
-              <InfoCard title="KI-Erkennung" value={geminiKey ? 'Google Gemini 1.5 Flash' : 'Tesseract.js (Fallback)'} />
-              <InfoCard title="Filmdaten" value="TMDB API" />
-              <InfoCard title="Coverbilder" value="TMDB Images" />
-              <InfoCard title="Datenbank" value="Supabase PostgreSQL" />
+              <InfoCard title={t('settings.cardAi')} value={geminiKey ? t('settings.cardAiGemini') : t('settings.cardAiFallback')} />
+              <InfoCard title={t('settings.cardMovies')} value="TMDB API" />
+              <InfoCard title={t('settings.cardCovers')} value="TMDB Images" />
+              <InfoCard title={t('settings.cardDatabase')} value={t('settings.cardDatabaseValue')} />
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
               <img
@@ -193,7 +232,7 @@ export function Settings({ initialSettings, onSave }: SettingsProps) {
                 alt="TMDB"
                 className="h-8 w-auto"
               />
-              <div className="text-slate-300 text-sm font-semibold mb-2">TMDB Attribution</div>
+              <div className="text-slate-300 text-sm font-semibold mb-2">{t('settings.tmdbAttribution')}</div>
               <div className="text-slate-500 text-sm leading-6">{TMDB_ATTRIBUTION_NOTICE}</div>
             </div>
           </section>

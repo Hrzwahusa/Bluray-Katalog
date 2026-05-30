@@ -10,13 +10,74 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native'
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
-import { getAllMovies, resolveWikimediaImageUrls } from '@bluray-katalog/shared'
+import { resolveWikimediaImageUrls } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
+import { getCachedMovies, syncStoredMoviesNow } from '../../lib/movie-store'
 
 const LIBRARY_VIEW_MODE_KEY = 'libraryViewMode'
+const ENABLE_LIBRARY_COVERS = true
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+function asIdString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return undefined
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const items = value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+  return items.length > 0 ? items : undefined
+}
+
+function normalizeMovieForUi(movie: Movie): Movie {
+  const title = asString((movie as unknown as Record<string, unknown>).title)?.trim() || 'Unbekannt'
+  const director = asString((movie as unknown as Record<string, unknown>).director)?.trim()
+  const coverUrl = asString((movie as unknown as Record<string, unknown>).cover_url)
+  const genres = asStringArray((movie as unknown as Record<string, unknown>).genres)
+  const castMembers = asStringArray((movie as unknown as Record<string, unknown>).cast_members)?.slice(0, 8)
+  const yearValue = (movie as unknown as Record<string, unknown>).year
+  const year = typeof yearValue === 'number' ? yearValue : undefined
+  const id = asIdString((movie as unknown as Record<string, unknown>).id)
+  const wikidataId = asString((movie as unknown as Record<string, unknown>).wikidata_id)
+  const imdbId = asString((movie as unknown as Record<string, unknown>).imdb_id)
+  const createdAt = asString((movie as unknown as Record<string, unknown>).created_at)
+  const updatedAt = asString((movie as unknown as Record<string, unknown>).updated_at)
+
+  return {
+    id,
+    title,
+    year,
+    genres,
+    cast_members: castMembers,
+    director,
+    cover_url: coverUrl,
+    wikidata_id: wikidataId,
+    imdb_id: imdbId,
+    created_at: createdAt,
+    updated_at: updatedAt,
+  }
+}
+
+async function resolveCoverUrlsSafely(urls: string[]): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(urls.filter(Boolean)))
+
+  if (typeof resolveWikimediaImageUrls !== 'function') {
+    return new Map(unique.map((url) => [url, url]))
+  }
+
+  try {
+    return await resolveWikimediaImageUrls(unique)
+  } catch {
+    return new Map(unique.map((url) => [url, url]))
+  }
+}
 
 function CoverImage({ uri, title, style }: { uri: string; title: string; style: object }) {
   const [failed, setFailed] = useState(false)
@@ -46,7 +107,7 @@ function CoverImage({ uri, title, style }: { uri: string; title: string; style: 
 
 export default function LibraryScreen() {
   const { t } = useI18n()
-  const { filterType, filterValue } = useLocalSearchParams<{ filterType?: string; filterValue?: string }>()
+  const { filterType, filterValue, refreshKey } = useLocalSearchParams<{ filterType?: string; filterValue?: string; refreshKey?: string }>()
 
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
   const [genreFilter, setGenreFilter] = useState<string>('__all__')
@@ -56,8 +117,12 @@ export default function LibraryScreen() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastAppliedFilterRef = useRef('')
+  const syncInFlightRef = useRef(false)
+  const lastSyncAtRef = useRef(0)
+  const didInitialLoadRef = useRef(false)
 
   const allGenres = [
     { value: '__all__', label: t('library.genreAll') },
@@ -85,61 +150,92 @@ export default function LibraryScreen() {
     })
   }, [viewMode])
 
-  const loadMovies = useCallback(async () => {
+  const loadMovies = useCallback(async (options?: { force?: boolean }) => {
+    const force = options?.force === true
+    const now = Date.now()
+
+    if (syncInFlightRef.current && !force) {
+      return
+    }
+
+    if (!force && now - lastSyncAtRef.current < 3000) {
+      return
+    }
+
+    syncInFlightRef.current = true
+    lastSyncAtRef.current = now
+
     try {
-      const url = await SecureStore.getItemAsync('supabaseUrl')
-      const key =
-        (await SecureStore.getItemAsync('supabaseKey')) ||
-        (await SecureStore.getItemAsync('supabaseAnonKey'))
-      if (!url || !key) {
-        setError(t('library.missingSupabase'))
-        setLoading(false)
+      const cachedMovies = (await getCachedMovies()).map(normalizeMovieForUi)
+      setMovies(cachedMovies)
+      setFiltered(cachedMovies)
+      setLoading(false)
+      setRefreshing(false)
+      setError(null)
+
+      if (!force) {
         return
       }
-      const data = await getAllMovies(url, key)
-      const coverUrls = await resolveWikimediaImageUrls(
-        data.map((movie) => movie.cover_url).filter((coverUrl): coverUrl is string => Boolean(coverUrl))
-      )
-      const normalizedData = data.map((movie) => ({
-        ...movie,
-        cover_url: movie.cover_url ? (coverUrls.get(movie.cover_url) ?? movie.cover_url) : movie.cover_url,
-      }))
-      setMovies(normalizedData)
-      setFiltered(normalizedData)
-      setError(null)
+
+      setSyncing(true)
+      // Run sync in background and then reload cache to keep UI resilient.
+      syncStoredMoviesNow()
+        .then(async () => {
+          const updated = (await getCachedMovies()).map(normalizeMovieForUi)
+          setMovies(updated)
+          setFiltered(updated)
+          setError(null)
+        })
+        .catch((error) => {
+          console.warn('Library refresh sync failed:', error)
+        })
+        .finally(() => {
+          setSyncing(false)
+          setRefreshing(false)
+        })
+      return
     } catch (e) {
       setError((e as Error).message)
     } finally {
+      syncInFlightRef.current = false
+      if (!force) {
+        setSyncing(false)
+      }
       setLoading(false)
       setRefreshing(false)
     }
-  }, [t])
+  }, [])
 
   useEffect(() => {
+    if (didInitialLoadRef.current) return
+    didInitialLoadRef.current = true
+    // Keep startup as light as possible on low-memory devices/emulators.
     loadMovies()
   }, [loadMovies])
 
-  useFocusEffect(
-    useCallback(() => {
-      loadMovies()
-    }, [loadMovies])
-  )
+  useEffect(() => {
+    if (!refreshKey) return
+    loadMovies()
+  }, [refreshKey, loadMovies])
 
   useEffect(() => {
     let result = movies
 
     if (genreFilter !== '__all__') {
-      result = result.filter((m) => m.genres?.includes(genreFilter))
+      result = result.filter((m) => Array.isArray(m.genres) && m.genres.includes(genreFilter))
     }
 
     if (query.trim()) {
       const q = query.toLowerCase()
-      result = result.filter(
-        (m) =>
-          m.title.toLowerCase().includes(q) ||
-          m.cast_members?.some((a) => a.toLowerCase().includes(q)) ||
-          m.director?.toLowerCase().includes(q)
-      )
+      result = result.filter((m) => {
+        const title = typeof m.title === 'string' ? m.title.toLowerCase() : ''
+        const cast = Array.isArray(m.cast_members)
+          ? m.cast_members.filter((a): a is string => typeof a === 'string').map((a) => a.toLowerCase())
+          : []
+        const director = typeof m.director === 'string' ? m.director.toLowerCase() : ''
+
+        return title.includes(q) || cast.some((a) => a.includes(q)) || director.includes(q)
+      })
     }
 
     setFiltered(result)
@@ -176,7 +272,7 @@ export default function LibraryScreen() {
           onPress={() => router.push(`/movie/${item.id}`)}
           activeOpacity={0.8}
         >
-          {item.cover_url && !item.cover_url.startsWith('data:') ? (
+          {ENABLE_LIBRARY_COVERS && typeof item.cover_url === 'string' && item.cover_url.length > 0 && !item.cover_url.startsWith('data:') ? (
             <CoverImage uri={item.cover_url} title={item.title} style={styles.listCover} />
           ) : (
             <View style={[styles.listCover, styles.coverPlaceholder]}>
@@ -201,7 +297,7 @@ export default function LibraryScreen() {
         onPress={() => router.push(`/movie/${item.id}`)}
         activeOpacity={0.8}
       >
-        {item.cover_url && !item.cover_url.startsWith('data:') ? (
+        {ENABLE_LIBRARY_COVERS && typeof item.cover_url === 'string' && item.cover_url.length > 0 && !item.cover_url.startsWith('data:') ? (
           <CoverImage uri={item.cover_url} title={item.title} style={styles.cover} />
         ) : (
           <View style={[styles.cover, styles.coverPlaceholder]}>
@@ -263,6 +359,13 @@ export default function LibraryScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {syncing && (
+          <View style={styles.syncBanner}>
+            <ActivityIndicator size="small" color="#60a5fa" />
+            <Text style={styles.syncBannerText}>{t('library.syncing')}</Text>
+          </View>
+        )}
 
         <View style={[styles.genreFilterWrap, genreMenuOpen && styles.genreFilterWrapOpen]}>
           <Text style={styles.genreLabel}>{t('library.genreLabel')}</Text>
@@ -328,11 +431,15 @@ export default function LibraryScreen() {
           keyExtractor={(item) => item.id || item.title}
           renderItem={renderItem}
           numColumns={viewMode === 'gallery' ? 2 : 1}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews
           contentContainerStyle={viewMode === 'gallery' ? styles.grid : styles.listGrid}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); loadMovies() }}
+              onRefresh={() => { setRefreshing(true); loadMovies({ force: true }) }}
               tintColor="#6366f1"
             />
           }
@@ -407,6 +514,23 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 3,
     gap: 4,
+  },
+  syncBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    backgroundColor: '#0b253a',
+    borderColor: '#1d4f70',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  syncBannerText: {
+    color: '#bae6fd',
+    fontSize: 12,
+    fontWeight: '600',
   },
   viewBtn: {
     paddingHorizontal: 12,

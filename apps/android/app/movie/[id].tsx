@@ -14,17 +14,14 @@ import {
   Platform,
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
-import * as SecureStore from 'expo-secure-store'
 import {
-  getAllMovies,
-  deleteMovie,
   resolveWikimediaImageUrls,
-  updateMovie,
   TMDB_ATTRIBUTION_NOTICE,
 } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
 import { TmdbLogo } from '../../lib/tmdb-logo'
+import { deleteStoredMovie, getCachedMovies, syncStoredMoviesNow, updateStoredMovie } from '../../lib/movie-store'
 
 function CoverImage({ uri, title }: { uri: string; title: string }) {
   const [failed, setFailed] = useState(false)
@@ -49,6 +46,20 @@ function CoverImage({ uri, title }: { uri: string; title: string }) {
       onError={() => setFailed(true)}
     />
   )
+}
+
+async function resolveCoverUrlsSafely(urls: string[]): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(urls.filter(Boolean)))
+
+  if (typeof resolveWikimediaImageUrls !== 'function') {
+    return new Map(unique.map((url) => [url, url]))
+  }
+
+  try {
+    return await resolveWikimediaImageUrls(unique)
+  } catch {
+    return new Map(unique.map((url) => [url, url]))
+  }
 }
 
 export default function MovieDetailScreen() {
@@ -97,27 +108,45 @@ export default function MovieDetailScreen() {
   }
 
   const loadMovie = useCallback(async () => {
-    const url = await SecureStore.getItemAsync('supabaseUrl')
-    const key =
-      (await SecureStore.getItemAsync('supabaseKey')) ||
-      (await SecureStore.getItemAsync('supabaseAnonKey'))
-    if (!url || !key) {
-      setLoading(false)
-      return
-    }
+    try {
+      const targetId = typeof id === 'string' ? id : ''
+      const cached = await getCachedMovies()
+      const cachedCoverUrls = await resolveCoverUrlsSafely(
+        cached.map((entry) => entry.cover_url).filter((coverUrl): coverUrl is string => Boolean(coverUrl))
+      )
+      const normalizedCached = cached.map((entry) => ({
+        ...entry,
+        cover_url: entry.cover_url ? (cachedCoverUrls.get(entry.cover_url) ?? entry.cover_url) : entry.cover_url,
+      }))
 
-    const all = await getAllMovies(url, key)
-    const coverUrls = await resolveWikimediaImageUrls(
-      all.map((entry) => entry.cover_url).filter((coverUrl): coverUrl is string => Boolean(coverUrl))
-    )
-    const normalizedMovies = all.map((entry) => ({
-      ...entry,
-      cover_url: entry.cover_url ? (coverUrls.get(entry.cover_url) ?? entry.cover_url) : entry.cover_url,
-    }))
-    const found = normalizedMovies.find((m) => m.id === id) || null
-    setMovie(found)
-    if (found) setFormFromMovie(found)
-    setLoading(false)
+      const foundCached = normalizedCached.find((entry) => String(entry.id ?? '') === targetId) || null
+      setMovie(foundCached)
+      if (foundCached) setFormFromMovie(foundCached)
+
+      // Refresh in background; never block the detail screen on sync.
+      syncStoredMoviesNow()
+        .then(async (synced) => {
+          const syncedCoverUrls = await resolveCoverUrlsSafely(
+            synced.map((entry) => entry.cover_url).filter((coverUrl): coverUrl is string => Boolean(coverUrl))
+          )
+          const normalizedSynced = synced.map((entry) => ({
+            ...entry,
+            cover_url: entry.cover_url ? (syncedCoverUrls.get(entry.cover_url) ?? entry.cover_url) : entry.cover_url,
+          }))
+          const foundSynced = normalizedSynced.find((entry) => String(entry.id ?? '') === targetId) || null
+          if (foundSynced) {
+            setMovie(foundSynced)
+            setFormFromMovie(foundSynced)
+          }
+        })
+        .catch(() => {
+          // Keep cached details visible if sync fails.
+        })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
   }, [id])
 
   useEffect(() => {
@@ -148,13 +177,9 @@ export default function MovieDetailScreen() {
         text: t('movie.delete'),
         style: 'destructive',
         onPress: async () => {
-          const url = await SecureStore.getItemAsync('supabaseUrl')
-          const key =
-            (await SecureStore.getItemAsync('supabaseKey')) ||
-            (await SecureStore.getItemAsync('supabaseAnonKey'))
-          if (!url || !key || !movie?.id) return
-          await deleteMovie(movie.id, url, key)
-          router.back()
+          if (!movie?.id) return
+          await deleteStoredMovie(movie.id)
+          router.replace(`/?refreshKey=${Date.now()}`)
         },
       },
     ])
@@ -191,16 +216,10 @@ export default function MovieDetailScreen() {
       return
     }
 
-    const url = await SecureStore.getItemAsync('supabaseUrl')
-    const key =
-      (await SecureStore.getItemAsync('supabaseKey')) ||
-      (await SecureStore.getItemAsync('supabaseAnonKey'))
-    if (!url || !key) return
-
     setSaving(true)
     setError(null)
     try {
-      const updated = await updateMovie(
+      const updated = await updateStoredMovie(
         {
           ...movie,
           title: form.title.trim(),
@@ -217,9 +236,7 @@ export default function MovieDetailScreen() {
           genres: parseList(form.genres),
           cast_members: parseList(form.cast_members),
           description: toNullable(form.description),
-        },
-        url,
-        key
+        }
       )
 
       const normalized = await resolveWikimediaImageUrls(

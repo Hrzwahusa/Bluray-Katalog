@@ -1,12 +1,14 @@
 <de-DE>
-• Metadaten und Cover-Suche wurden auf TMDB umgestellt (inkl. aktuellerer Treffer).
-• TMDB-Attribution mit korrektem farbigem TMDB-Logo in Einstellungen, Filmdetails und Scan-Ansicht.
-• Verbesserter Scan-Flow mit klarerer TMDB-Rueckmeldung bei Suche und Detailabruf.
-• Technisches Release-Update: Android versionCode auf 10 erhoeht.
+• Bibliothek aktualisiert sich jetzt sofort nach Hinzufuegen oder Loeschen von Filmen.
+• Detailansicht stabilisiert: kein endloser Ladebildschirm mehr beim Oeffnen eines Films.
+• Cover-Anzeige und Start-Laden der lokalen Datenbank in der Bibliothek verbessert.
+• Sync-/Refresh-Flow robust gemacht, inkl. besserer Fehlerbehandlung bei problematischen Daten.
+• Technisches Release-Update: App-Version 1.1.0, Android versionCode auf 12 erhoeht.
 </de-DE>
 <en-US>
-• Metadata and cover lookup now use TMDB (including more up-to-date search matches).
-• TMDB attribution now includes the correct colored TMDB logo in Settings, Movie Details, and Scan view.
-• Improved scan flow with clearer TMDB status feedback during search and detail loading.
-• Technical release update: Android versionCode increased to 10.
+• Library now refreshes immediately after adding or deleting movies.
+• Movie detail screen stabilized: no more endless loading when opening a movie.
+• Improved cover rendering and startup loading of the local movie database in library.
+• Sync/refresh flow hardened with better fallback handling for problematic data.
+• Technical release update: app version 1.1.0, Android versionCode increased to 12.
 </en-US>

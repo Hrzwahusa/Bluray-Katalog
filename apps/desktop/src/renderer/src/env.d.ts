@@ -1,7 +1,9 @@
 // Typen für die Electron API (window.api)
 interface ElectronAPI {
-  getSettings: () => Promise<{ supabaseUrl: string; supabaseKey: string; geminiKey: string }>
-  setSettings: (settings: { supabaseUrl: string; supabaseKey: string; geminiKey: string }) => Promise<boolean>
+  getSettings: () => Promise<{ supabaseUrl: string; supabaseKey: string; geminiKey: string; language: 'de' | 'en' }>
+  setSettings: (settings: { supabaseUrl: string; supabaseKey: string; geminiKey: string; language: 'de' | 'en' }) => Promise<boolean>
+  getLocalMovies: () => Promise<import('../../../../packages/shared/src/types').Movie[]>
+  setLocalMovies: (movies: import('../../../../packages/shared/src/types').Movie[]) => Promise<boolean>
   recognizeText: (imageBase64: string) => Promise<{
     text: string
     confidence: number

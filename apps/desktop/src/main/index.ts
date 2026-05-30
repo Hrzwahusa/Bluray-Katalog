@@ -4,10 +4,11 @@ import { createWorker } from 'tesseract.js'
 import { GoogleGenAI } from '@google/genai'
 import ElectronStore from 'electron-store'
 import { searchMovieFuzzy, getWikipediaDetails, searchMoviePoster } from '@shared/wikidata'
+import type { Movie } from '@shared/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Store = (ElectronStore as any).default || ElectronStore
-const store = new Store<{ supabaseUrl: string; supabaseKey: string }>()
+const store = new Store<{ supabaseUrl: string; supabaseKey: string; geminiKey: string; language: 'de' | 'en'; localMovies: Movie[] }>()
 
 type GeminiMovieGuess = {
   title?: string
@@ -154,13 +155,24 @@ ipcMain.handle('settings:get', () => {
     supabaseUrl: store.get('supabaseUrl', ''),
     supabaseKey: store.get('supabaseKey', ''),
     geminiKey: store.get('geminiKey', ''),
+    language: store.get('language', 'en'),
   }
 })
 
-ipcMain.handle('settings:set', (_, settings: { supabaseUrl: string; supabaseKey: string; geminiKey: string }) => {
+ipcMain.handle('settings:set', (_, settings: { supabaseUrl: string; supabaseKey: string; geminiKey: string; language: 'de' | 'en' }) => {
   store.set('supabaseUrl', settings.supabaseUrl)
   store.set('supabaseKey', settings.supabaseKey)
   store.set('geminiKey', settings.geminiKey)
+  store.set('language', settings.language)
+  return true
+})
+
+ipcMain.handle('movies:get-local', () => {
+  return store.get('localMovies', [])
+})
+
+ipcMain.handle('movies:set-local', (_, movies: Movie[]) => {
+  store.set('localMovies', movies)
   return true
 })
 

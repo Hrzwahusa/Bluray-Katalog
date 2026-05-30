@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { AppSettings } from '../App'
 import type { Movie } from '@shared/types'
-import { getAllMovies, deleteMovie, updateMovie } from '@shared/supabase'
 import { MovieCard } from '../components/MovieCard'
 import { MovieDetail } from '../components/MovieDetail'
 import { Search, Camera } from '../components/Icons'
+import { deleteStoredMovie, getStoredMovies, updateStoredMovie } from '../lib/movie-store'
+import { useI18n } from '../i18n'
 
 const LIBRARY_VIEW_MODE_KEY = 'libraryViewMode'
+const ALL_GENRES_VALUE = '__all__'
 
 interface LibraryProps {
   settings: AppSettings
@@ -14,6 +16,7 @@ interface LibraryProps {
 }
 
 export function Library({ settings, onScanClick }: LibraryProps) {
+  const { t } = useI18n()
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>('gallery')
   const [movies, setMovies] = useState<Movie[]>([])
   const [filtered, setFiltered] = useState<Movie[]>([])
@@ -21,23 +24,17 @@ export function Library({ settings, onScanClick }: LibraryProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
-  const [genreFilter, setGenreFilter] = useState<string>('Alle')
+  const [genreFilter, setGenreFilter] = useState<string>(ALL_GENRES_VALUE)
   const [restoreSearchFocus, setRestoreSearchFocus] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  const hasDb = settings.supabaseUrl && settings.supabaseKey
-
   const loadMovies = useCallback(async () => {
-    if (!hasDb) {
-      setLoading(false)
-      return
-    }
     try {
       setLoading(true)
       setError(null)
-      const data = await getAllMovies(settings.supabaseUrl, settings.supabaseKey)
+      const data = await getStoredMovies(settings)
       setMovies(data)
       setFiltered(data)
     } catch (e) {
@@ -45,7 +42,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
     } finally {
       setLoading(false)
     }
-  }, [settings, hasDb])
+  }, [settings])
 
   useEffect(() => {
     loadMovies()
@@ -65,7 +62,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
   // Suche & Filter
   useEffect(() => {
     let result = movies
-    if (genreFilter !== 'Alle') {
+    if (genreFilter !== ALL_GENRES_VALUE) {
       result = result.filter((m) => m.genres?.includes(genreFilter))
     }
     if (query.trim()) {
@@ -81,12 +78,12 @@ export function Library({ settings, onScanClick }: LibraryProps) {
     setFiltered(result)
   }, [query, movies, genreFilter])
 
-  const allGenres = ['Alle', ...Array.from(new Set(movies.flatMap((m) => m.genres || []))).sort()]
+  const allGenres = [ALL_GENRES_VALUE, ...Array.from(new Set(movies.flatMap((m) => m.genres || []))).sort()]
 
   const handleDelete = async (id: string) => {
     setIsDeleting(true)
     try {
-      await deleteMovie(id, settings.supabaseUrl, settings.supabaseKey)
+      await deleteStoredMovie(id, settings)
       await loadMovies()
       setRestoreSearchFocus(true)
       setSelectedMovie(null)
@@ -97,7 +94,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
   }
 
   const handleSave = async (movie: Movie) => {
-    const updated = await updateMovie(movie, settings.supabaseUrl, settings.supabaseKey)
+    const updated = await updateStoredMovie(movie, settings)
     await loadMovies()
     setSelectedMovie(updated)
   }
@@ -107,7 +104,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
       setGenreFilter(value)
       setQuery('')
     } else {
-      setGenreFilter('Alle')
+      setGenreFilter(ALL_GENRES_VALUE)
       setQuery(value)
     }
     setViewMode('gallery')
@@ -143,9 +140,9 @@ export function Library({ settings, onScanClick }: LibraryProps) {
         {deleteConfirmOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 no-drag">
             <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
-              <h2 className="text-lg font-semibold text-white">Film wirklich löschen?</h2>
+              <h2 className="text-lg font-semibold text-white">{t('library.deleteTitle')}</h2>
               <p className="mt-2 text-sm text-slate-300">
-                Dieser Eintrag wird dauerhaft entfernt.
+                {t('library.deleteMessage')}
               </p>
               <div className="mt-5 flex justify-end gap-2">
                 <button
@@ -153,14 +150,14 @@ export function Library({ settings, onScanClick }: LibraryProps) {
                   disabled={isDeleting}
                   className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors disabled:opacity-60"
                 >
-                  Abbrechen
+                  {t('library.cancel')}
                 </button>
                 <button
                   onClick={() => selectedMovie.id && handleDelete(selectedMovie.id)}
                   disabled={isDeleting}
                   className="px-3 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm transition-colors disabled:opacity-60"
                 >
-                  {isDeleting ? 'Lösche...' : 'Löschen'}
+                  {isDeleting ? t('library.deleting') : t('library.delete')}
                 </button>
               </div>
             </div>
@@ -174,15 +171,15 @@ export function Library({ settings, onScanClick }: LibraryProps) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-4 px-6 py-4 border-b border-slate-700 bg-slate-800 shrink-0">
-        <h1 className="text-xl font-bold text-white">Meine Bibliothek</h1>
-        <span className="text-slate-400 text-sm">({filtered.length} Filme)</span>
+        <h1 className="text-xl font-bold text-white">{t('library.title')}</h1>
+        <span className="text-slate-400 text-sm">({t('library.count', { count: filtered.length })})</span>
         <div className="flex-1" />
         <button
           onClick={onScanClick}
           className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors"
         >
           <span className="w-4 h-4"><Camera /></span>
-          Cover scannen
+          {t('library.scan')}
         </button>
       </div>
 
@@ -195,7 +192,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Suche nach Titel, Schauspieler, Regisseur..."
+            placeholder={t('library.searchPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-700 text-white placeholder-slate-400 rounded-lg text-sm border border-slate-600 focus:border-brand-500 focus:outline-none"
@@ -211,7 +208,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
                 : 'text-slate-300 hover:bg-slate-700'
             }`}
           >
-            Galerie
+            {t('library.viewGallery')}
           </button>
           <button
             onClick={() => setViewMode('list')}
@@ -221,13 +218,13 @@ export function Library({ settings, onScanClick }: LibraryProps) {
                 : 'text-slate-300 hover:bg-slate-700'
             }`}
           >
-            Liste
+            {t('library.viewList')}
           </button>
         </div>
 
         {/* Genre-Filter als Dropdown */}
         <div className="flex items-center gap-2 no-drag">
-          <label htmlFor="genreFilter" className="text-xs text-slate-400">Genre</label>
+          <label htmlFor="genreFilter" className="text-xs text-slate-400">{t('library.genre')}</label>
           <select
             id="genreFilter"
             value={genreFilter}
@@ -235,7 +232,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
             className="px-3 py-2 rounded-lg bg-slate-700 text-slate-100 text-sm border border-slate-600 focus:border-brand-500 focus:outline-none"
           >
             {allGenres.map((genre) => (
-              <option key={genre} value={genre}>{genre}</option>
+              <option key={genre} value={genre}>{genre === ALL_GENRES_VALUE ? t('library.genreAll') : genre}</option>
             ))}
           </select>
         </div>
@@ -243,29 +240,23 @@ export function Library({ settings, onScanClick }: LibraryProps) {
 
       {/* Inhalt */}
       <div className="flex-1 overflow-y-auto p-6">
-        {!hasDb && (
-          <EmptyState
-            title="Datenbank nicht konfiguriert"
-            message="Bitte Supabase-URL und API-Key in den Einstellungen hinterlegen."
-          />
-        )}
-        {hasDb && loading && (
+        {loading && (
           <div className="flex items-center justify-center h-40">
-            <div className="text-slate-400">Lade Bibliothek...</div>
+            <div className="text-slate-400">{t('library.loading')}</div>
           </div>
         )}
-        {hasDb && error && (
+        {error && (
           <div className="p-4 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
-            Fehler: {error}
+            {t('library.error', { message: error })}
           </div>
         )}
-        {hasDb && !loading && !error && filtered.length === 0 && (
+        {!loading && !error && filtered.length === 0 && (
           <EmptyState
-            title={movies.length === 0 ? 'Noch keine Filme' : 'Keine Treffer'}
+            title={movies.length === 0 ? t('library.emptyTitle') : t('library.noResultsTitle')}
             message={
               movies.length === 0
-                ? 'Scannen Sie Ihr erstes Blu-ray Cover um loszulegen!'
-                : 'Keine Filme gefunden. Bitte andere Suchbegriffe verwenden.'
+                ? t('library.emptyMessage')
+                : t('library.noResultsMessage')
             }
           />
         )}
@@ -304,7 +295,7 @@ export function Library({ settings, onScanClick }: LibraryProps) {
                         movie.year ? String(movie.year) : undefined,
                         movie.director,
                         movie.genres?.[0],
-                      ].filter(Boolean).join(' | ') || 'Keine Zusatzinfos'}
+                      ].filter(Boolean).join(' | ') || t('library.noExtraInfo')}
                     </p>
                   </div>
                 </button>

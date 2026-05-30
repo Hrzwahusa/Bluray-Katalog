@@ -3,9 +3,10 @@ import type { AppSettings } from '../App'
 import type { WikidataMovie } from '@shared/types'
 import { TMDB_ATTRIBUTION_NOTICE } from '@shared/wikidata'
 
-import { saveMovie } from '@shared/supabase'
 import { Camera, X, Check, Loader, AlertCircle, Search } from '../components/Icons'
 import tmdbLogo from '../assets/tmdb-logo.svg'
+import { saveStoredMovie } from '../lib/movie-store'
+import { useI18n } from '../i18n'
 
 interface ScanProps {
   settings: AppSettings
@@ -102,6 +103,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessa
 }
 
 export function Scan({ settings, onSuccess }: ScanProps) {
+  const { t } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -157,7 +159,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const startCamera = useCallback(async () => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError('navigator.mediaDevices nicht verfügbar (kein HTTPS oder Electron-Kontext?)')
+        setError(t('scan.errorMediaDevices'))
         return
       }
 
@@ -166,7 +168,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
       const videoDevices = devices.filter((d) => d.kind === 'videoinput')
       console.log('[Kamera] Gefundene Video-Geräte:', videoDevices)
       if (videoDevices.length === 0) {
-        setError('Kein Kameragerät gefunden.')
+        setError(t('scan.errorNoCamera'))
         return
       }
 
@@ -185,9 +187,9 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     } catch (e) {
       const err = e as Error
       console.error('[Kamera] Fehler:', err)
-      setError(`Kamera-Fehler (${err.name}): ${err.message}`)
+      setError(t('scan.errorCamera', { name: err.name, message: err.message }))
     }
-  }, [])
+  }, [t])
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -225,7 +227,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
 
     // Texterkennung starten
     try {
-      setStatusMessage('Titelerkennung läuft...')
+      setStatusMessage(t('scan.statusRecognizing'))
       const result = await window.api.recognizeText(ocrUrl)
       const cleanedText = extractTitleFromOcr(result.text)
       setOcrText(result.text)
@@ -242,15 +244,15 @@ export function Scan({ settings, onSuccess }: ScanProps) {
       setError(`OCR-Fehler: ${(e as Error).message}`)
       setStep('select')
     }
-  }, [stopCamera])
+  }, [stopCamera, t])
 
   // ── Filmsuche ───────────────────────────────────────────────────────
   const doSearch = async (query: string, geminiGuessFromCall?: GeminiMovieGuess | null) => {
     if (!query.trim()) return
     try {
-      setStatusMessage('Suche in TMDB...')
+      setStatusMessage(t('scan.statusSearching'))
       setCandidates([])
-      const results = await window.api.searchMovies(query.trim())
+      const results = await window.api.searchMovies(query.trim(), settings.language)
       if (results.length > 0) {
         setCandidates(results)
         setError(null)
@@ -265,7 +267,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
         return
       }
 
-      setError('Keine Filme gefunden. Bitte Suchbegriff anpassen.')
+      setError(t('scan.errorNoSearchResults'))
     } catch (e) {
       setError(`Suchfehler: ${(e as Error).message}`)
     } finally {
@@ -306,7 +308,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const confirmManualEntry = useCallback(() => {
     const title = manualForm.title.trim()
     if (!title) {
-      setError('Bitte mindestens einen Titel eingeben.')
+      setError(t('scan.manualRequired'))
       return
     }
 
@@ -338,27 +340,27 @@ export function Scan({ settings, onSuccess }: ScanProps) {
       const options: CoverOption[] = []
       const wikidataCover = normalizeCoverUrl(movie.coverUrl)
       if (wikidataCover) {
-        options.push({ id: 'tmdb', label: 'TMDB-Bild', url: wikidataCover })
+        options.push({ id: 'tmdb', label: t('scan.coverOptionTmdb'), url: wikidataCover })
       }
 
       const geminiCover = normalizeCoverUrl(geminiGuess?.coverImageUrl)
       if (geminiCover) {
-        options.push({ id: 'gemini', label: 'Gemini-Vorschlag', url: geminiCover })
+        options.push({ id: 'gemini', label: t('scan.coverOptionGemini'), url: geminiCover })
       }
 
       const immediateOptions = dedupeCoverOptions(options)
       setCoverOptions(immediateOptions)
       setSelectedCoverUrl(immediateOptions[0]?.url ?? wikidataCover ?? '')
 
-      setStatusMessage('Suche Film-Poster...')
+      setStatusMessage(t('scan.statusSearchingPoster'))
       const searchedPoster = await withTimeout(
         window.api.searchMoviePoster(movie.title, movie.year, movie.originalTitle),
         30000,
-        'Poster-Suche hat zu lange gedauert.'
+        t('scan.statusPosterTimeout')
       )
       const posterCover = normalizeCoverUrl(searchedPoster)
       if (posterCover) {
-        options.push({ id: 'poster-search', label: 'Poster-Suche', url: posterCover })
+        options.push({ id: 'poster-search', label: t('scan.coverOptionPoster'), url: posterCover })
       }
 
       const uniqueOptions = dedupeCoverOptions(options)
@@ -366,7 +368,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
       setSelectedCoverUrl(uniqueOptions[0]?.url ?? wikidataCover ?? '')
     } catch {
       const fallbackCover = normalizeCoverUrl(movie.coverUrl) ?? ''
-      setCoverOptions(fallbackCover ? [{ id: 'fallback', label: 'Standardbild', url: fallbackCover }] : [])
+      setCoverOptions(fallbackCover ? [{ id: 'fallback', label: t('scan.coverOptionFallback'), url: fallbackCover }] : [])
       setSelectedCoverUrl(fallbackCover)
     } finally {
       setStatusMessage('')
@@ -378,16 +380,16 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const confirmAndSave = async () => {
     if (!selectedMovie) return
     setStep('saving')
-    setStatusMessage('Hole TMDB-Details...')
+    setStatusMessage(t('scan.statusLoadingDetails'))
 
     try {
       const isLocalCandidate = selectedMovie.wikidataId.startsWith('gemini:') || selectedMovie.wikidataId.startsWith('manual:')
 
       // Zusätzliche Details von TMDB
-      const wikiDetails = await window.api.getWikipediaDetails(selectedMovie.title, 'de')
+      const wikiDetails = await window.api.getWikipediaDetails(selectedMovie.title, settings.language)
 
-      setStatusMessage('Speichere in Datenbank...')
-      await saveMovie(
+      setStatusMessage(t('scan.statusSaving'))
+      await saveStoredMovie(
         {
           title: selectedMovie.title,
           original_title: selectedMovie.originalTitle,
@@ -402,13 +404,12 @@ export function Scan({ settings, onSuccess }: ScanProps) {
           runtime: selectedMovie.runtime,
           bluray_photo_url: capturedImage || undefined,
         },
-        settings.supabaseUrl,
-        settings.supabaseKey
+        settings
       )
 
       setStep('done')
     } catch (e) {
-      setError(`Fehler beim Speichern: ${(e as Error).message}`)
+      setError(t('scan.errorSaving', { message: (e as Error).message }))
       setStep('confirm')
     }
   }
@@ -432,7 +433,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-4 px-6 py-4 border-b border-slate-700 bg-slate-800 shrink-0">
-        <h1 className="text-xl font-bold text-white">Cover scannen</h1>
+        <h1 className="text-xl font-bold text-white">{t('scan.title')}</h1>
         <StepIndicator current={step} />
       </div>
 
@@ -459,7 +460,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
               {!cameraActive && (
                 <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500">
                   <div className="w-16 h-16"><Camera /></div>
-                  <p className="text-sm">Kamera noch nicht aktiv</p>
+                  <p className="text-sm">{t('scan.cameraInactive')}</p>
                 </div>
               )}
             </div>
@@ -481,13 +482,13 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                     className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-lg transition-colors"
                   >
                     <span className="w-5 h-5"><Camera /></span>
-                    Kamera starten
+                    {t('scan.startCamera')}
                   </button>
                   <button
                     onClick={startManualTitleSearch}
                     className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                   >
-                    Titel manuell eingeben
+                    {t('scan.enterTitleManually')}
                   </button>
                 </>
               ) : (
@@ -496,13 +497,13 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                     onClick={stopCamera}
                     className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                   >
-                    Abbrechen
+                    {t('scan.back')}
                   </button>
                   <button
                     onClick={capture}
                     className="flex-1 flex items-center justify-center gap-2 py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-lg transition-colors"
                   >
-                    Foto aufnehmen
+                    {t('scan.capture')}
                   </button>
                 </>
               )}
@@ -518,7 +519,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
             )}
             <div className="flex items-center gap-3 p-4 bg-slate-800 rounded-lg text-slate-300">
               <span className="w-5 h-5 text-brand-400"><Loader /></span>
-              {statusMessage || 'Wird verarbeitet...'}
+              {statusMessage || t('scan.processing')}
             </div>
           </div>
         )}
@@ -531,11 +532,11 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 <img
                   src={capturedImage}
                   className="w-32 rounded-lg object-cover shrink-0 bg-black"
-                  alt="Cover-Foto"
+                  alt={t('scan.coverPhoto')}
                 />
                 <div className="flex-1 space-y-2">
                   <p className="text-slate-400 text-xs font-mono bg-slate-800 p-2 rounded max-h-20 overflow-y-auto">
-                    OCR-Text: {ocrText || '(kein Text erkannt)'}
+                    {t('scan.ocrText', { value: ocrText || t('scan.ocrNoText') })}
                   </p>
                 </div>
               </div>
@@ -549,7 +550,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && doSearch(searchQuery)}
-                placeholder="Filmtitel suchen..."
+                placeholder={t('scan.searchPlaceholder')}
                 className="flex-1 px-4 py-2.5 bg-slate-700 text-white placeholder-slate-400 rounded-lg border border-slate-600 focus:border-brand-500 focus:outline-none"
               />
               <button
@@ -562,7 +563,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 ) : (
                   <span className="w-4 h-4"><Search /></span>
                 )}
-                Suchen
+                {t('scan.search')}
               </button>
             </div>
 
@@ -579,7 +580,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                   <img src={tmdbLogo} alt="TMDB" className="h-6 w-auto" />
                   <p className="mt-2 text-xs leading-relaxed text-slate-500">{TMDB_ATTRIBUTION_NOTICE}</p>
                 </div>
-                <p className="text-slate-400 text-sm">{candidates.length} Treffer – bitte den richtigen Film auswählen:</p>
+                <p className="text-slate-400 text-sm">{t('scan.results', { count: candidates.length })}</p>
                 {candidates.map((movie) => (
                   <button
                     key={movie.wikidataId}
@@ -605,8 +606,8 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                       )}
                       <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                         {movie.year && <span>{movie.year}</span>}
-                        {movie.director && <span>Regie: {movie.director}</span>}
-                        {movie.runtime && <span>{movie.runtime} Min.</span>}
+                        {movie.director && <span>{t('scan.director', { value: movie.director })}</span>}
+                        {movie.runtime && <span>{t('scan.runtime', { value: movie.runtime })}</span>}
                       </div>
                       {movie.genres.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -629,8 +630,8 @@ export function Scan({ settings, onSuccess }: ScanProps) {
             >
               <span className="text-xl">✍️</span>
               <div>
-                <div className="font-semibold text-white">Film manuell eingeben</div>
-                <div className="text-slate-400 text-sm">Kein Treffer? Titel und Metadaten selbst erfassen.</div>
+                <div className="font-semibold text-white">{t('scan.manualTitle')}</div>
+                <div className="text-slate-400 text-sm">{t('scan.manualSubtitle')}</div>
               </div>
             </button>
           </div>
@@ -638,20 +639,20 @@ export function Scan({ settings, onSuccess }: ScanProps) {
 
         {step === 'manual' && (
           <div className="max-w-2xl mx-auto space-y-4">
-            <h2 className="text-lg font-semibold text-white">Film manuell eingeben</h2>
+            <h2 className="text-lg font-semibold text-white">{t('scan.manualHeading')}</h2>
             <div className="bg-slate-800 rounded-xl p-4 space-y-3 border border-slate-700">
               <input
                 type="text"
                 value={manualForm.title}
                 onChange={(e) => setManualForm((prev) => ({ ...prev, title: e.target.value }))}
-                placeholder="Titel *"
+                placeholder={t('scan.manualFieldTitle')}
                 className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
               />
               <input
                 type="text"
                 value={manualForm.originalTitle}
                 onChange={(e) => setManualForm((prev) => ({ ...prev, originalTitle: e.target.value }))}
-                placeholder="Originaltitel"
+                placeholder={t('scan.manualFieldOriginalTitle')}
                 className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -659,14 +660,14 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                   type="number"
                   value={manualForm.year}
                   onChange={(e) => setManualForm((prev) => ({ ...prev, year: e.target.value }))}
-                  placeholder="Jahr"
+                  placeholder={t('scan.manualFieldYear')}
                   className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
                 />
                 <input
                   type="text"
                   value={manualForm.director}
                   onChange={(e) => setManualForm((prev) => ({ ...prev, director: e.target.value }))}
-                  placeholder="Regie"
+                  placeholder={t('scan.manualFieldDirector')}
                   className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
                 />
               </div>
@@ -674,14 +675,14 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 type="text"
                 value={manualForm.genres}
                 onChange={(e) => setManualForm((prev) => ({ ...prev, genres: e.target.value }))}
-                placeholder="Genres (kommagetrennt)"
+                placeholder={t('scan.manualFieldGenres')}
                 className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
               />
               <input
                 type="text"
                 value={manualForm.cast}
                 onChange={(e) => setManualForm((prev) => ({ ...prev, cast: e.target.value }))}
-                placeholder="Darsteller (kommagetrennt)"
+                placeholder={t('scan.manualFieldCast')}
                 className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -689,21 +690,21 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                   type="number"
                   value={manualForm.runtime}
                   onChange={(e) => setManualForm((prev) => ({ ...prev, runtime: e.target.value }))}
-                  placeholder="Laufzeit (Min.)"
+                  placeholder={t('scan.manualFieldRuntime')}
                   className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
                 />
                 <input
                   type="text"
                   value={manualForm.imdbId}
                   onChange={(e) => setManualForm((prev) => ({ ...prev, imdbId: e.target.value }))}
-                  placeholder="IMDb-ID"
+                  placeholder={t('scan.manualFieldImdb')}
                   className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none"
                 />
               </div>
               <textarea
                 value={manualForm.description}
                 onChange={(e) => setManualForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Beschreibung"
+                placeholder={t('scan.manualFieldDescription')}
                 rows={4}
                 className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-brand-500 focus:outline-none resize-y"
               />
@@ -712,13 +713,13 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                   onClick={() => setStep('select')}
                   className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                 >
-                  Zurück
+                  {t('scan.back')}
                 </button>
                 <button
                   onClick={confirmManualEntry}
                   className="flex-1 px-4 py-2.5 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
                 >
-                  Zur Bestätigung
+                  {t('scan.toConfirmation')}
                 </button>
               </div>
             </div>
@@ -731,7 +732,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
         {/* Schritt: Bestätigung */}
         {step === 'confirm' && selectedMovie && (
           <div className="max-w-2xl mx-auto space-y-4">
-            <h2 className="text-lg font-semibold text-white">Film bestätigen</h2>
+            <h2 className="text-lg font-semibold text-white">{t('scan.confirmTitle')}</h2>
             <div className="bg-slate-800 rounded-xl p-6 space-y-4">
               <div className="flex gap-6">
                 {(selectedCoverUrl || selectedMovie.coverUrl) && (
@@ -747,10 +748,10 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                     <p className="text-slate-400 text-sm">{selectedMovie.originalTitle}</p>
                   )}
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <InfoRow label="Jahr" value={selectedMovie.year?.toString()} />
-                    <InfoRow label="Regie" value={selectedMovie.director} />
-                    <InfoRow label="Laufzeit" value={selectedMovie.runtime ? `${selectedMovie.runtime} Min.` : undefined} />
-                    <InfoRow label="Wikidata" value={selectedMovie.wikidataId} />
+                    <InfoRow label={t('scan.infoYear')} value={selectedMovie.year?.toString()} />
+                    <InfoRow label={t('scan.infoDirector')} value={selectedMovie.director} />
+                    <InfoRow label={t('scan.infoRuntime')} value={selectedMovie.runtime ? t('scan.runtime', { value: selectedMovie.runtime }) : undefined} />
+                    <InfoRow label={t('scan.infoWikidata')} value={selectedMovie.wikidataId} />
                   </div>
                   {selectedMovie.genres.length > 0 && (
                     <div className="flex flex-wrap gap-1">
@@ -761,7 +762,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                   )}
                   {selectedMovie.cast.length > 0 && (
                     <p className="text-slate-400 text-sm">
-                      <span className="text-slate-500">Darsteller: </span>
+                      <span className="text-slate-500">{t('scan.cast')}</span>
                       {selectedMovie.cast.slice(0, 5).join(', ')}
                     </p>
                   )}
@@ -769,11 +770,11 @@ export function Scan({ settings, onSuccess }: ScanProps) {
               </div>
 
               <div className="space-y-2 border-t border-slate-700 pt-4">
-                <p className="text-sm text-slate-300">Cover-Auswahl</p>
+                <p className="text-sm text-slate-300">{t('scan.coverSelection')}</p>
                 {loadingCoverOptions && (
                   <div className="flex items-center gap-2 text-slate-400 text-sm">
                     <span className="w-4 h-4"><Loader /></span>
-                    {statusMessage || 'Suche weitere Cover-Optionen...'}
+                    {statusMessage || t('scan.moreCoverOptions')}
                   </div>
                 )}
 
@@ -795,7 +796,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-500">Keine Cover-Optionen gefunden, es wird das Standardbild verwendet.</p>
+                  <p className="text-sm text-slate-500">{t('scan.noCoverOptions')}</p>
                 )}
               </div>
             </div>
@@ -809,14 +810,14 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 onClick={() => setStep('select')}
                 className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
               >
-                Zurück
+                {t('scan.back')}
               </button>
               <button
                 onClick={confirmAndSave}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-700 hover:bg-green-600 text-white font-medium rounded-lg transition-colors"
               >
                 <span className="w-4 h-4"><Check /></span>
-                In Katalog speichern
+                {t('scan.saveToCatalog')}
               </button>
             </div>
           </div>
@@ -835,9 +836,9 @@ export function Scan({ settings, onSuccess }: ScanProps) {
           <div className="max-w-md mx-auto text-center space-y-6 pt-8">
             <div className="w-16 h-16 mx-auto text-green-400"><Check /></div>
             <div>
-              <h2 className="text-xl font-bold text-white mb-2">Film gespeichert!</h2>
+              <h2 className="text-xl font-bold text-white mb-2">{t('scan.savedTitle')}</h2>
               <p className="text-slate-400">
-                <span className="text-white font-medium">{selectedMovie?.title}</span> wurde erfolgreich in Ihrem Katalog gespeichert.
+                {t('scan.savedMessage', { title: selectedMovie?.title ?? '' })}
               </p>
             </div>
             <div className="flex gap-3 justify-center">
@@ -845,13 +846,13 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 onClick={reset}
                 className="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
               >
-                Weiteres Cover scannen
+                {t('scan.scanNext')}
               </button>
               <button
                 onClick={onSuccess}
                 className="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-lg transition-colors"
               >
-                Zur Bibliothek
+                {t('scan.toLibrary')}
               </button>
             </div>
           </div>
@@ -872,14 +873,15 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
 }
 
 function StepIndicator({ current }: { current: Step }) {
+  const { t } = useI18n()
   const steps: { key: Step; label: string }[] = [
-    { key: 'capture', label: 'Foto' },
+    { key: 'capture', label: t('scan.stepCapture') },
     { key: 'ocr', label: 'OCR' },
-    { key: 'select', label: 'Auswahl' },
-    { key: 'manual', label: 'Manuell' },
-    { key: 'confirm', label: 'Bestätigen' },
-    { key: 'saving', label: 'Speichern' },
-    { key: 'done', label: 'Fertig' },
+    { key: 'select', label: t('scan.stepSelect') },
+    { key: 'manual', label: t('scan.stepManual') },
+    { key: 'confirm', label: t('scan.stepConfirm') },
+    { key: 'saving', label: t('scan.stepSaving') },
+    { key: 'done', label: t('scan.stepDone') },
   ]
   const currentIndex = steps.findIndex((s) => s.key === current)
 

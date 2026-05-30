@@ -1,5 +1,5 @@
-import React from 'react'
-import { Stack } from 'expo-router'
+import React, { useEffect } from 'react'
+import { SplashScreen, Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { LanguageProvider, useI18n } from '../lib/i18n'
 
@@ -13,6 +13,13 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const { t } = useI18n()
+
+  useEffect(() => {
+    // Some release builds can stay on the native splash. Force-hide after mount.
+    SplashScreen.hideAsync().catch(() => {
+      // Ignore to keep startup resilient.
+    })
+  }, [])
 
   return (
     <>

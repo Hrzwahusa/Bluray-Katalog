@@ -12,6 +12,11 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(monorepoRoot, 'node_modules'),
 ]
+config.resolver.extraNodeModules = {
+  ...(config.resolver.extraNodeModules || {}),
+  stream: path.resolve(monorepoRoot, 'node_modules/stream-browserify'),
+  ws: path.resolve(projectRoot, 'shims/ws.js'),
+}
 
 // TypeScript aus Workspace-Paketen auflösen
 config.resolver.sourceExts = [...config.resolver.sourceExts, 'ts', 'tsx', 'cjs', 'mjs']

@@ -114,72 +114,11 @@ Lokaler Release-Build (ohne EAS Queue, Windows):
 npm run android:build:production:local
 ```
 
-Das erzeugte AAB liegt danach unter:
-
-```text
-apps/android/android/app/build/outputs/bundle/release/app-release.aab
-```
-
-Die Play-Console-Versionshinweise werden dabei aus [apps/android/play-store-release-notes.txt](apps/android/play-store-release-notes.txt) übernommen und als Kopie neben dem Bundle abgelegt.
-
 ## Releases
 
 - Desktop-Pakete lassen sich mit `npm run desktop:package` erzeugen.
 - Android-Builds lassen sich mit EAS über `eas build --platform android` erzeugen.
 - Für GitHub Releases empfiehlt sich, die erzeugten Desktop-Artefakte oder Android-Builds erst nach einem verifizierten Tag hochzuladen und nicht im Repository selbst zu versionieren.
-
-### GitHub Release (ohne AAB)
-
-Für GitHub Releases nur die APK hochladen. Die AAB ist für die Play Console gedacht.
-
-```bash
-cd apps/android/android
-./gradlew.bat --no-daemon assembleRelease bundleRelease
-
-cd ../..
-gh release create v1.1.0 \
-	--title "v1.1.0" \
-	--notes-file apps/android/play-store-release-notes.txt \
-	apps/android/android/app/build/outputs/apk/release/app-release.apk
-```
-
-- APK (GitHub Release): `apps/android/android/app/build/outputs/apk/release/app-release.apk`
-- AAB (nur Play Console): `apps/android/android/app/build/outputs/bundle/release/app-release.aab`
-
-### Google Play (Android)
-
-Vorbereitung (einmalig):
-
-1. In der Google Play Console eine App mit dem Paketnamen `com.bluraykatalog` anlegen.
-2. In Google Cloud ein Service-Konto erstellen und als JSON-Key herunterladen.
-3. Das Service-Konto in der Play Console unter API-Zugriff mit dem Projekt verknüpfen.
-4. Dem Service-Konto mindestens Rechte auf Release-Management (z. B. „Release Manager“) geben.
-
-Build + Upload (Internal Testing):
-
-```bash
-cd apps/android
-eas login
-eas build --platform android --profile production
-eas submit --platform android --profile production --key C:/ABSOLUTER/PFAD/google-play-service-account.json
-```
-
-Hinweise:
-
-- Das Profil `production` in `apps/android/eas.json` ist auf den Play-Track `internal` konfiguriert.
-- Da ein natives `apps/android/android`-Projekt vorhanden ist, kommen Paketname und Versionscode aus `apps/android/android/app/build.gradle`.
-- Vor jedem neuen Upload `versionCode` in `apps/android/android/app/build.gradle` erhoehen.
-- Fuer lokale Release-Builds mit Gradle wird eine eigene Signatur benoetigt:
-	- Keystore einmalig erzeugen (im Ordner `apps/android/android`):
-		- `keytool -genkeypair -v -keystore release-keystore.jks -alias release -keyalg RSA -keysize 2048 -validity 10000`
-  - `apps/android/android/keystore.properties.example` nach `apps/android/android/keystore.properties` kopieren
-  - Werte fuer `storeFile`, `storePassword`, `keyAlias`, `keyPassword` setzen
-  - Keystore und `keystore.properties` nicht ins Repository committen
-- Komfort-Skripte:
-	- `npm run build:production`
-	- `npm run build:production:local`
-	- `npm run submit:production`
-	- `npm run release:internal`
 
 ## Technologie-Stack
 

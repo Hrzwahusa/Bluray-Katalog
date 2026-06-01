@@ -7,7 +7,7 @@ Die App arbeitet lokal-first: Filme werden immer lokal gespeichert. Supabase ist
 ## Features
 
 - Cover per Kamera oder Galerie erfassen
-- Automatische Titelerkennung mit Gemini auf Android
+- Automatische Titelerkennung mit Gemini auf Android (Google ML Kit als Fallback) 
 - Desktop-OCR mit Gemini als Primärweg und Tesseract.js als Fallback
 - Filmdaten und Coverbilder über TMDB ohne eigenen Backend-Server
 - Lokal-first Speicherung auf dem Gerät
@@ -62,7 +62,7 @@ Für die Titelerkennung kann ein Gemini API-Key hinterlegt werden.
 - Android: in der App unter Einstellungen
 - Desktop: in der App unter Einstellungen
 
-Ohne Gemini funktioniert die Desktop-App weiterhin mit Tesseract-Fallback. Auf Android bleibt die manuelle Filmsuche nutzbar.
+Ohne Gemini funktioniert die Desktop-App weiterhin mit Tesseract-Fallback. Auf Android funktioniert die Erkennung weiterhin über Google ML Kit und die manuelle Filmsuche bleibt nutzbar.
 
 ## Entwicklung
 

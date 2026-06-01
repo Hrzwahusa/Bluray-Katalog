@@ -79,13 +79,73 @@ async function resolveCoverUrlsSafely(urls: string[]): Promise<Map<string, strin
   }
 }
 
+async function normalizeMovieCoverUrls(
+  movies: Movie[],
+  cache: Map<string, string>
+): Promise<Movie[]> {
+  const sourceUrls = Array.from(
+    new Set(
+      movies
+        .map((entry) => entry.cover_url)
+        .filter((coverUrl): coverUrl is string => typeof coverUrl === 'string' && coverUrl.length > 0)
+    )
+  )
+
+  if (sourceUrls.length === 0) {
+    return movies
+  }
+
+  const pendingUrls = sourceUrls.filter((coverUrl) => !cache.has(coverUrl))
+  if (pendingUrls.length > 0) {
+    const resolvedUrls = await resolveCoverUrlsSafely(pendingUrls)
+    for (const sourceUrl of pendingUrls) {
+      cache.set(sourceUrl, resolvedUrls.get(sourceUrl) ?? sourceUrl)
+    }
+  }
+
+  return movies.map((entry) => {
+    if (!entry.cover_url) return entry
+    return {
+      ...entry,
+      cover_url: cache.get(entry.cover_url) ?? entry.cover_url,
+    }
+  })
+}
+
 function CoverImage({ uri, title, style }: { uri: string; title: string; style: object }) {
   const [failed, setFailed] = useState(false)
+  const [displayUri, setDisplayUri] = useState(uri)
+  const [didRetryResolve, setDidRetryResolve] = useState(false)
 
   useEffect(() => {
     // FlatList reuses cells; reset image state whenever a different URI is rendered.
     setFailed(false)
+    setDisplayUri(uri)
+    setDidRetryResolve(false)
   }, [uri])
+
+  const handleError = useCallback(() => {
+    if (didRetryResolve || !uri) {
+      setFailed(true)
+      return
+    }
+
+    setDidRetryResolve(true)
+
+    void resolveCoverUrlsSafely([uri])
+      .then((resolved) => {
+        const retryUri = resolved.get(uri)
+        if (retryUri && retryUri !== displayUri) {
+          setDisplayUri(retryUri)
+          setFailed(false)
+          return
+        }
+        setFailed(true)
+      })
+      .catch(() => {
+        setFailed(true)
+      })
+  }, [didRetryResolve, uri, displayUri])
 
   if (failed) {
     return (
@@ -97,10 +157,10 @@ function CoverImage({ uri, title, style }: { uri: string; title: string; style: 
 
   return (
     <Image
-      source={{ uri }}
+      source={{ uri: displayUri }}
       style={style}
       resizeMode="cover"
-      onError={() => setFailed(true)}
+      onError={handleError}
     />
   )
 }
@@ -123,6 +183,7 @@ export default function LibraryScreen() {
   const syncInFlightRef = useRef(false)
   const lastSyncAtRef = useRef(0)
   const didInitialLoadRef = useRef(false)
+  const resolvedCoverUrlCacheRef = useRef<Map<string, string>>(new Map())
 
   const allGenres = [
     { value: '__all__', label: t('library.genreAll') },
@@ -166,7 +227,10 @@ export default function LibraryScreen() {
     lastSyncAtRef.current = now
 
     try {
-      const cachedMovies = (await getCachedMovies()).map(normalizeMovieForUi)
+      const cachedMovies = await normalizeMovieCoverUrls(
+        (await getCachedMovies()).map(normalizeMovieForUi),
+        resolvedCoverUrlCacheRef.current
+      )
       setMovies(cachedMovies)
       setFiltered(cachedMovies)
       setLoading(false)
@@ -181,7 +245,10 @@ export default function LibraryScreen() {
       // Run sync in background and then reload cache to keep UI resilient.
       syncStoredMoviesNow()
         .then(async () => {
-          const updated = (await getCachedMovies()).map(normalizeMovieForUi)
+          const updated = await normalizeMovieCoverUrls(
+            (await getCachedMovies()).map(normalizeMovieForUi),
+            resolvedCoverUrlCacheRef.current
+          )
           setMovies(updated)
           setFiltered(updated)
           setError(null)

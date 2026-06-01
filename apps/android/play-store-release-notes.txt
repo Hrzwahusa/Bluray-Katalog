@@ -1,12 +1,12 @@
 <de-DE>
-• Lokal-first Ansatz: Filme werden immer zuerst lokal auf dem Geraet gespeichert.
-• Optionaler Supabase-Sync: Nur wenn Supabase URL + Key gesetzt sind, wird zusaetzlich mit Supabase synchronisiert.
-• Ohne Supabase-Zugangsdaten bleibt die App voll lokal nutzbar.
-• Technisches Release-Update: App-Version 1.1.0, Android versionCode auf 12 erhoeht.
+• Cover-Anzeige in der Bibliothek verbessert: fehlgeschlagene Bilder werden jetzt robuster aufgeloest und erneut geladen.
+• Platzhalter in der Galerie wurden reduziert, besonders bei Wikimedia-basierten Cover-URLs.
+• Stabilitaets- und Ladeverbesserungen in der Android-Library-Ansicht.
+• Technisches Release-Update: App-Version 1.1.2, Android versionCode auf 14 erhoeht.
 </de-DE>
 <en-US>
-• Local-first approach: movies are always stored locally on device first.
-• Optional Supabase sync: synchronization only runs when Supabase URL + key are configured.
-• Without Supabase credentials, the app remains fully usable in local-only mode.
-• Technical release update: app version 1.1.0, Android versionCode increased to 12.
+• Improved library cover rendering: failed images are now resolved and retried more reliably.
+• Fewer placeholder tiles in gallery view, especially for Wikimedia-based cover URLs.
+• Stability and loading improvements in the Android library screen.
+• Technical release update: app version 1.1.2, Android versionCode increased to 14.
 </en-US>

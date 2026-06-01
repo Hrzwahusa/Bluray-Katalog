@@ -20,6 +20,7 @@ import {
 } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
+import { getCachedCoverUri } from '../../lib/cover-cache'
 import { TmdbLogo } from '../../lib/tmdb-logo'
 import { deleteStoredMovie, getCachedMovies, syncStoredMoviesNow, updateStoredMovie } from '../../lib/movie-store'
 
@@ -59,6 +60,29 @@ async function resolveCoverUrlsSafely(urls: string[]): Promise<Map<string, strin
     return await resolveWikimediaImageUrls(unique)
   } catch {
     return new Map(unique.map((url) => [url, url]))
+  }
+}
+
+async function hydrateMovieCover(entry: Movie | null, verifyAgainstRemote: boolean): Promise<Movie | null> {
+  if (!entry?.cover_url) return entry
+
+  const resolved = await resolveCoverUrlsSafely([entry.cover_url])
+  const resolvedUrl = resolved.get(entry.cover_url) ?? entry.cover_url
+  if (!/^https?:\/\//i.test(resolvedUrl)) {
+    return {
+      ...entry,
+      cover_url: resolvedUrl,
+    }
+  }
+
+  const localOrRemote = await getCachedCoverUri(resolvedUrl, entry.title || 'cover', {
+    verifyAgainstRemote,
+    maxRetries: 2,
+  })
+
+  return {
+    ...entry,
+    cover_url: localOrRemote,
   }
 }
 
@@ -111,32 +135,19 @@ export default function MovieDetailScreen() {
     try {
       const targetId = typeof id === 'string' ? id : ''
       const cached = await getCachedMovies()
-      const cachedCoverUrls = await resolveCoverUrlsSafely(
-        cached.map((entry) => entry.cover_url).filter((coverUrl): coverUrl is string => Boolean(coverUrl))
-      )
-      const normalizedCached = cached.map((entry) => ({
-        ...entry,
-        cover_url: entry.cover_url ? (cachedCoverUrls.get(entry.cover_url) ?? entry.cover_url) : entry.cover_url,
-      }))
-
-      const foundCached = normalizedCached.find((entry) => String(entry.id ?? '') === targetId) || null
-      setMovie(foundCached)
-      if (foundCached) setFormFromMovie(foundCached)
+      const foundCached = cached.find((entry) => String(entry.id ?? '') === targetId) || null
+      const hydratedCached = await hydrateMovieCover(foundCached, true)
+      setMovie(hydratedCached)
+      if (hydratedCached) setFormFromMovie(hydratedCached)
 
       // Refresh in background; never block the detail screen on sync.
       syncStoredMoviesNow()
         .then(async (synced) => {
-          const syncedCoverUrls = await resolveCoverUrlsSafely(
-            synced.map((entry) => entry.cover_url).filter((coverUrl): coverUrl is string => Boolean(coverUrl))
-          )
-          const normalizedSynced = synced.map((entry) => ({
-            ...entry,
-            cover_url: entry.cover_url ? (syncedCoverUrls.get(entry.cover_url) ?? entry.cover_url) : entry.cover_url,
-          }))
-          const foundSynced = normalizedSynced.find((entry) => String(entry.id ?? '') === targetId) || null
-          if (foundSynced) {
-            setMovie(foundSynced)
-            setFormFromMovie(foundSynced)
+          const foundSynced = synced.find((entry) => String(entry.id ?? '') === targetId) || null
+          const hydratedSynced = await hydrateMovieCover(foundSynced, true)
+          if (hydratedSynced) {
+            setMovie(hydratedSynced)
+            setFormFromMovie(hydratedSynced)
           }
         })
         .catch(() => {

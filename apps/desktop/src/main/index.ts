@@ -80,6 +80,19 @@ function parseGeminiMovieGuess(raw: string): GeminiMovieGuess | null {
   }
 }
 
+function scoreOcrText(text: string): number {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!normalized) return Number.NEGATIVE_INFINITY
+
+  const alphaCount = (normalized.match(/[A-Za-zÄÖÜäöüß]/g) ?? []).length
+  const digitCount = (normalized.match(/\d/g) ?? []).length
+  const noiseCount = (normalized.match(/[^A-Za-zÄÖÜäöüß0-9\s:'\-–—&().]/g) ?? []).length
+  const lineCount = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length
+
+  return alphaCount + lineCount * 4 - digitCount * 2 - noiseCount * 3
+}
+
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   try {
@@ -203,9 +216,7 @@ ipcMain.handle('ocr:recognize', async (_, imageBase64: string) => {
               {
                 text:
                   'You are analyzing a Blu-ray or DVD movie cover photo. Return STRICT JSON only (no markdown, no commentary) with this shape: ' +
-                  '{"title":"","originalTitle":"","year":null,"director":"","genres":[],"cast":[],"runtime":null,"imdbId":"","description":"","coverImageUrl":"","posterHints":[]}. ' +
-                  'Rules: 1) title must be the main movie title from the cover. 2) Use null for unknown numbers and empty strings/arrays for unknown text fields. ' +
-                  '3) Keep genres and cast short and relevant. 4) coverImageUrl may be empty and should only be set when a direct likely poster image URL is visible on the cover/source context. 5) posterHints should contain short alternate search titles (e.g., subtitle, translated title variant) when useful. 6) Do not invent highly specific facts; leave fields empty if uncertain.',
+                  '{"title":""}. The title must be the main movie title from the cover. Do not include any other fields. If uncertain, return the best plausible main title only.',
               },
             ],
           },
@@ -228,12 +239,31 @@ ipcMain.handle('ocr:recognize', async (_, imageBase64: string) => {
   // ── Tesseract Fallback ───────────────────────────────────────────
   const worker = await createWorker(['deu', 'eng'], 1)
   try {
-    await worker.setParameters({ tessedit_pageseg_mode: '11' })
     const buffer = Buffer.from(base64Data, 'base64')
-    const { data } = await worker.recognize(buffer)
+    const passes = [6, 11]
+    let bestText = ''
+    let bestScore = Number.NEGATIVE_INFINITY
+    let bestConfidence = 0
+
+    for (const psm of passes) {
+      await worker.setParameters({
+        tessedit_pageseg_mode: String(psm),
+        preserve_interword_spaces: '1',
+      })
+      const { data } = await worker.recognize(buffer)
+      const candidateText = data.text.trim()
+      const candidateScore = scoreOcrText(candidateText)
+
+      if (candidateScore > bestScore) {
+        bestScore = candidateScore
+        bestText = candidateText
+        bestConfidence = data.confidence
+      }
+    }
+
     return {
-      text: data.text.trim(),
-      confidence: data.confidence,
+      text: bestText,
+      confidence: bestConfidence,
     }
   } catch (e) {
     return { text: '', confidence: 0, error: (e as Error).message }

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BluRay Katalog - Scan. Catalog. Own Your Collection.</title>
+  <meta name="description" content="Scan blu-ray covers with your phone camera, auto-detect titles from TMDB, and build a searchable digital library. Local-first, no ads, open source.">
+  <meta property="og:title" content="BluRay Katalog">
+  <meta property="og:description" content="Scan your blu-ray covers, build a digital library. Local-first, open source.">
+  <meta property="og:image" content="Screenshot_20260601_143837.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b0f1a;
+      --surface: #131828;
+      --border: #1e2540;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --green: #22c55e;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: var(--accent-hover);
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 24px;
+      letter-spacing: 0.02em;
+    }
+
+    h1 {
+      font-size: clamp(32px, 6vw, 56px);
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    h1 .gradient {
+      background: linear-gradient(135deg, #818cf8, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: clamp(16px, 2.5vw, 20px);
+      color: var(--muted);
+      max-width: 540px;
+      margin: 0 auto 32px;
+    }
+
+    .cta-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .features {
+      padding: 60px 0;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+    }
+
+    .feature-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+
+    .feature-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .how {
+      padding: 60px 0;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: clamp(24px, 4vw, 36px);
+      font-weight: 700;
+      margin-bottom: 40px;
+      letter-spacing: -0.02em;
+    }
+
+    .steps {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .step {
+      flex: 1;
+      min-width: 200px;
+      max-width: 280px;
+      text-align: center;
+      position: relative;
+    }
+
+    .step-number {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--accent-hover);
+    }
+
+    .step h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .step p {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .screenshots {
+      padding: 60px 0;
+      text-align: center;
+    }
+
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-top: 32px;
+      align-items: start;
+    }
+
+    .screenshot-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .screenshot-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 9 / 20;
+      object-fit: cover;
+    }
+
+    .trust {
+      padding: 40px 0;
+      text-align: center;
+    }
+
+    .trust-badges {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .trust-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .trust-badge .icon {
+      color: var(--green);
+      font-size: 16px;
+    }
+
+    .footer {
+      padding: 40px 0;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .footer a {
+      color: var(--accent-hover);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="container">
+      <span class="badge">Closed Beta - Free to Join</span>
+      <h1>Scan your blu-rays.<br><span class="gradient">Own your collection.</span></h1>
+      <p class="subtitle">Take a photo of a cover, auto-detect the title from TMDB, and build a searchable digital library - right on your phone.</p>
+      <div class="cta-group">
+        <a href="https://play.google.com/apps/testing/com.bluraykatalog" class="btn btn-primary">Join Beta on Google Play</a>
+        <a href="https://github.com/Hrzwahusa/Bluray-Katalog" class="btn btn-secondary">View Source on GitHub</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="container">
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📸</div>
+          <h3>Camera Scan</h3>
+          <p>Take a photo of any blu-ray cover or pick one from your gallery. The app reads the title automatically.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎬</div>
+          <h3>TMDB Metadata</h3>
+          <p>Director, cast, runtime, genres, ratings, descriptions - all pulled from The Movie Database.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>AI-Assisted Detection</h3>
+          <p>Optional Gemini AI integration for smarter title and metadata extraction from cover photos.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔍</div>
+          <h3>Search &amp; Filter</h3>
+          <p>Full-text search across your collection. Filter by genre. Toggle between gallery and list views.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💻</div>
+          <h3>Desktop App</h3>
+          <p>Also available for Windows and Linux - manage your collection on the big screen.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Local-First</h3>
+          <p>Your data stays on your device. Optional Supabase sync if you want cloud storage across devices.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">✏️</div>
+          <h3>Edit Everything</h3>
+          <p>Full manual editing for every field. Add your own notes, ratings, and photos.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🌐</div>
+          <h3>Open Source</h3>
+          <p>Fully open source on GitHub. No ads, no tracking, no paywalls. Just your collection.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="how">
+    <div class="container">
+      <h2 class="section-title">How it works</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3>Scan a Cover</h3>
+          <p>Open the camera, point at your blu-ray cover, and tap to capture.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3>Detect Title</h3>
+          <p>The app reads the title and searches TMDB for matching movie data.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3>Build Your Library</h3>
+          <p>Confirm the movie, edit details, and repeat. Your catalog grows automatically.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="screenshots">
+    <div class="container">
+      <h2 class="section-title">See it in action</h2>
+      <div class="screenshot-grid">
+        <figure class="screenshot-card">
+          <img src="Screenshot_20260601_143837.png" alt="BluRay Katalog screenshot 1" loading="lazy">
+        </figure>
+        <figure class="screenshot-card">
+          <img src="Screenshot_20260601_143903.png" alt="BluRay Katalog screenshot 2" loading="lazy">
+        </figure>
+        <figure class="screenshot-card">
+          <img src="Screenshot_20260601_143928.png" alt="BluRay Katalog screenshot 3" loading="lazy">
+        </figure>
+        <figure class="screenshot-card">
+          <img src="Screenshot_20260601_143948.png" alt="BluRay Katalog screenshot 4" loading="lazy">
+        </figure>
+      </div>
+    </div>
+  </div>
+
+  <div class="trust">
+    <div class="container">
+      <div class="trust-badges">
+        <div class="trust-badge"><span class="icon">&#10003;</span> No ads</div>
+        <div class="trust-badge"><span class="icon">&#10003;</span> No tracking</div>
+        <div class="trust-badge"><span class="icon">&#10003;</span> Open source</div>
+        <div class="trust-badge"><span class="icon">&#10003;</span> Local-first</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="container">
+      <p>BluRay Katalog - Built by a collector, for collectors.</p>
+      <p style="margin-top: 8px;">
+        <a href="https://play.google.com/apps/testing/com.bluraykatalog">Join Beta</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://github.com/Hrzwahusa/Bluray-Katalog">GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://github.com/Hrzwahusa/Bluray-Katalog/blob/main/privacy-policy.html">Privacy Policy</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

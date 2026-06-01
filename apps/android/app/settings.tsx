@@ -214,7 +214,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         <View style={styles.infoGrid}>
-          <InfoCard title="OCR" value="Gemini AI (online)" />
+          <InfoCard title="OCR" value="Gemini AI / ML Kit" />
           <InfoCard title={t('settings.cardMovies')} value="TMDB" />
           <InfoCard title={t('settings.cardCover')} value="TMDB Images" />
           <InfoCard title={t('settings.cardDb')} value={t('settings.cardDbValue')} />

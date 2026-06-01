@@ -90,6 +90,57 @@ function dedupeCoverOptions(options: CoverOption[]): CoverOption[] {
   return out
 }
 
+function normalizeOcrTitleCandidate(value: string): string {
+  return value
+    .replace(/^[\s\-–—:•·*_\[\]()+"'`]+/, '')
+    .replace(/[\s\-–—:•·*_\[\]()+"'`]+$/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function scoreTitleCandidate(value: string): number {
+  const normalized = normalizeOcrTitleCandidate(value)
+  if (!normalized) return Number.NEGATIVE_INFINITY
+
+  const letters = (normalized.match(/[A-Za-zÄÖÜäöüß]/g) ?? []).length
+  const words = normalized.split(/\s+/).filter(Boolean).length
+  const noisePenalty = (normalized.match(/[^A-Za-zÄÖÜäöüß0-9\s:'\-–—&().]/g) ?? []).length * 3
+  const digitPenalty = (normalized.match(/\d/g) ?? []).length * 2
+  const badKeywordPenalty = /\b(blu-ray|bluray|ultra hd|4k|1080p|dolby|dts|edition|extended|unrated|special|collector|directors cut)\b/i.test(normalized)
+    ? 35
+    : 0
+
+  return letters + words * 3 - digitPenalty - noisePenalty - badKeywordPenalty
+}
+
+function extractTitleCandidates(text: string): string[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => normalizeOcrTitleCandidate(line))
+    .filter((line) => line.length > 2 && line.length < 64)
+    .filter((line) => /[A-Za-zÄÖÜäöüß]/.test(line))
+    .filter((line) => !/(blu-ray|bluray|ultra hd|4k|1080p|dolby|dts|version|edition|extended|unrated|special|collector)/i.test(line))
+
+  const variants = new Set<string>()
+  for (const line of lines) {
+    variants.add(line)
+
+    const beforeDash = line.split(/\s+[-–—]\s+/)[0]?.trim()
+    if (beforeDash) variants.add(beforeDash)
+
+    const beforePipe = line.split('|')[0]?.trim()
+    if (beforePipe) variants.add(beforePipe)
+
+    const beforeYear = line.replace(/\s*\(?((19|20)\d{2})\)?\s*$/, '').trim()
+    if (beforeYear) variants.add(beforeYear)
+  }
+
+  return Array.from(variants)
+    .map((candidate) => normalizeOcrTitleCandidate(candidate))
+    .filter(Boolean)
+    .sort((left, right) => scoreTitleCandidate(right) - scoreTitleCandidate(left))
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   try {
@@ -235,11 +286,6 @@ export function Scan({ settings, onSuccess }: ScanProps) {
       setSearchQuery(cleanedText)
       setStatusMessage('')
       setStep('select')
-
-      // Automatisch suchen
-      if (cleanedText) {
-        await doSearch(cleanedText, result.movieGuess ?? null)
-      }
     } catch (e) {
       setError(`OCR-Fehler: ${(e as Error).message}`)
       setStep('select')
@@ -252,11 +298,17 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     try {
       setStatusMessage(t('scan.statusSearching'))
       setCandidates([])
-      const results = await window.api.searchMovies(query.trim(), settings.language)
-      if (results.length > 0) {
-        setCandidates(results)
-        setError(null)
-        return
+      const searchCandidates = extractTitleCandidates(query)
+      if (searchCandidates.length === 0) searchCandidates.push(query.trim())
+
+      for (const candidate of searchCandidates) {
+        const results = await window.api.searchMovies(candidate, settings.language)
+        if (results.length > 0) {
+          setCandidates(results)
+          setSearchQuery(candidate)
+          setError(null)
+          return
+        }
       }
 
       const fallbackGuess = geminiGuessFromCall ?? geminiGuess
@@ -402,7 +454,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
           wikidata_id: isLocalCandidate ? undefined : selectedMovie.wikidataId,
           imdb_id: selectedMovie.imdbId,
           runtime: selectedMovie.runtime,
-          bluray_photo_url: capturedImage || undefined,
+          bluray_photo_url: undefined,
         },
         settings
       )
@@ -903,20 +955,5 @@ function StepIndicator({ current }: { current: Step }) {
 }
 
 function extractTitleFromOcr(text: string): string {
-  // Versucht den Filmtitel aus dem OCR-Text zu extrahieren
-  const lines = text
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 2 && l.length < 60)
-    // Zeilen entfernen die nur Zahlen oder Sonderzeichen enthalten
-    .filter((l) => /[a-zA-ZäöüÄÖÜß]/.test(l))
-    // Bekannte Blu-ray-Texte entfernen
-    .filter(
-      (l) =>
-        !/(blu-ray|bluray|ultra hd|4k|1080p|dolby|dts|version|edition|extended|unrated)/i.test(l)
-    )
-
-  // Die längste Zeile als wahrscheinlichsten Titel nehmen
-  if (lines.length === 0) return text.split('\n')[0]?.trim() || ''
-  return lines.sort((a, b) => b.length - a.length)[0]
+  return extractTitleCandidates(text)[0] ?? normalizeOcrTitleCandidate(text.split(/\r?\n/)[0] ?? '')
 }

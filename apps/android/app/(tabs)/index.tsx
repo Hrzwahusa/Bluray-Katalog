@@ -15,6 +15,7 @@ import * as SecureStore from 'expo-secure-store'
 import { resolveWikimediaImageUrls } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
+import { getCachedCoverUri, isLocalCachedCoverUri } from '../../lib/cover-cache'
 import { getCachedMovies, syncStoredMoviesNow } from '../../lib/movie-store'
 
 const LIBRARY_VIEW_MODE_KEY = 'libraryViewMode'
@@ -81,7 +82,9 @@ async function resolveCoverUrlsSafely(urls: string[]): Promise<Map<string, strin
 
 async function normalizeMovieCoverUrls(
   movies: Movie[],
-  cache: Map<string, string>
+  cache: Map<string, string>,
+  fileCache: Map<string, string>,
+  options?: { verifyAgainstRemote?: boolean; maxRetries?: number; batchSize?: number }
 ): Promise<Movie[]> {
   const sourceUrls = Array.from(
     new Set(
@@ -103,13 +106,110 @@ async function normalizeMovieCoverUrls(
     }
   }
 
-  return movies.map((entry) => {
+  const remoteTargets = new Map<string, string>()
+  for (const entry of movies) {
+    if (!entry.cover_url) continue
+    const resolvedUrl = cache.get(entry.cover_url) ?? entry.cover_url
+    if (!/^https?:\/\//i.test(resolvedUrl)) continue
+    if (isLocalCachedCoverUri(fileCache.get(resolvedUrl) ?? '')) continue
+    if (!remoteTargets.has(resolvedUrl)) {
+      remoteTargets.set(resolvedUrl, entry.title || 'cover')
+    }
+  }
+
+  const batchSize = Math.max(4, options?.batchSize ?? 10)
+  const targetEntries = Array.from(remoteTargets.entries())
+  for (let index = 0; index < targetEntries.length; index += batchSize) {
+    const batch = targetEntries.slice(index, index + batchSize)
+    await Promise.all(batch.map(async ([resolvedUrl, title]) => {
+      const cachedLocalUri = await getCachedCoverUri(resolvedUrl, title, {
+        verifyAgainstRemote: options?.verifyAgainstRemote === true,
+        maxRetries: options?.maxRetries ?? 1,
+      })
+
+      if (isLocalCachedCoverUri(cachedLocalUri)) {
+        fileCache.set(resolvedUrl, cachedLocalUri)
+      } else {
+        fileCache.delete(resolvedUrl)
+      }
+    }))
+  }
+
+  const normalizedMovies = movies.map((entry) => {
     if (!entry.cover_url) return entry
+
+    const resolvedUrl = cache.get(entry.cover_url) ?? entry.cover_url
+    if (!/^https?:\/\//i.test(resolvedUrl)) {
+      return {
+        ...entry,
+        cover_url: resolvedUrl,
+      }
+    }
+
     return {
       ...entry,
-      cover_url: cache.get(entry.cover_url) ?? entry.cover_url,
+      cover_url: fileCache.get(resolvedUrl) ?? resolvedUrl,
     }
   })
+
+  return normalizedMovies
+}
+
+function countRemoteCoverUrls(movies: Movie[]): number {
+  return movies.reduce((count, entry) => {
+    if (entry.cover_url && /^https?:\/\//i.test(entry.cover_url)) {
+      return count + 1
+    }
+    return count
+  }, 0)
+}
+
+async function fillCoverCacheUntilComplete(
+  movies: Movie[],
+  resolvedCache: Map<string, string>,
+  localFileCache: Map<string, string>,
+  onProgress?: (movies: Movie[]) => void
+): Promise<Movie[]> {
+  let current = movies
+  let previousRemoteCount = Number.MAX_SAFE_INTEGER
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    console.log('[library-cover-cache] round:start', {
+      attempt: attempt + 1,
+      remoteBefore: countRemoteCoverUrls(current),
+      totalMovies: current.length,
+      localCacheEntries: localFileCache.size,
+    })
+
+    current = await normalizeMovieCoverUrls(current, resolvedCache, localFileCache, {
+      maxRetries: 2,
+      batchSize: 10,
+    })
+
+    onProgress?.(current)
+
+    const remoteCount = countRemoteCoverUrls(current)
+    console.log('[library-cover-cache] round:end', {
+      attempt: attempt + 1,
+      remoteAfter: remoteCount,
+      localCacheEntries: localFileCache.size,
+    })
+
+    if (remoteCount === 0) {
+      console.log('[library-cover-cache] complete', { attempt: attempt + 1, totalMovies: current.length })
+      break
+    }
+
+    // Keep retrying in background so late-network responses eventually fill the cache.
+    if (remoteCount >= previousRemoteCount) {
+      await new Promise((resolve) => setTimeout(resolve, 700))
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    }
+    previousRemoteCount = remoteCount
+  }
+
+  return current
 }
 
 function CoverImage({ uri, title, style }: { uri: string; title: string; style: object }) {
@@ -125,6 +225,14 @@ function CoverImage({ uri, title, style }: { uri: string; title: string; style: 
   }, [uri])
 
   const handleError = useCallback(() => {
+    console.warn('[library-cover-image] error', {
+      title,
+      uri,
+      displayUri,
+      didRetryResolve,
+      isLocalUri: isLocalCachedCoverUri(displayUri),
+    })
+
     if (didRetryResolve || !uri) {
       setFailed(true)
       return
@@ -184,6 +292,7 @@ export default function LibraryScreen() {
   const lastSyncAtRef = useRef(0)
   const didInitialLoadRef = useRef(false)
   const resolvedCoverUrlCacheRef = useRef<Map<string, string>>(new Map())
+  const localCoverFileCacheRef = useRef<Map<string, string>>(new Map())
 
   const allGenres = [
     { value: '__all__', label: t('library.genreAll') },
@@ -229,13 +338,24 @@ export default function LibraryScreen() {
     try {
       const cachedMovies = await normalizeMovieCoverUrls(
         (await getCachedMovies()).map(normalizeMovieForUi),
-        resolvedCoverUrlCacheRef.current
+        resolvedCoverUrlCacheRef.current,
+        localCoverFileCacheRef.current
       )
       setMovies(cachedMovies)
       setFiltered(cachedMovies)
       setLoading(false)
       setRefreshing(false)
       setError(null)
+
+      void fillCoverCacheUntilComplete(
+        cachedMovies,
+        resolvedCoverUrlCacheRef.current,
+        localCoverFileCacheRef.current,
+        (progressMovies) => {
+          setMovies(progressMovies)
+          setFiltered(progressMovies)
+        }
+      )
 
       if (!force) {
         return
@@ -247,10 +367,22 @@ export default function LibraryScreen() {
         .then(async () => {
           const updated = await normalizeMovieCoverUrls(
             (await getCachedMovies()).map(normalizeMovieForUi),
-            resolvedCoverUrlCacheRef.current
+            resolvedCoverUrlCacheRef.current,
+            localCoverFileCacheRef.current
           )
-          setMovies(updated)
-          setFiltered(updated)
+
+          const completedMovies = await fillCoverCacheUntilComplete(
+            updated,
+            resolvedCoverUrlCacheRef.current,
+            localCoverFileCacheRef.current,
+            (progressMovies) => {
+              setMovies(progressMovies)
+              setFiltered(progressMovies)
+            }
+          )
+
+          setMovies(completedMovies)
+          setFiltered(completedMovies)
           setError(null)
         })
         .catch((error) => {
@@ -498,10 +630,10 @@ export default function LibraryScreen() {
           keyExtractor={(item) => item.id || item.title}
           renderItem={renderItem}
           numColumns={viewMode === 'gallery' ? 2 : 1}
-          initialNumToRender={Math.min(filtered.length || 0, 120)}
-          maxToRenderPerBatch={80}
-          updateCellsBatchingPeriod={10}
-          windowSize={21}
+          initialNumToRender={viewMode === 'gallery' ? 12 : 20}
+          maxToRenderPerBatch={viewMode === 'gallery' ? 8 : 12}
+          updateCellsBatchingPeriod={50}
+          windowSize={viewMode === 'gallery' ? 7 : 9}
           removeClippedSubviews={false}
           contentContainerStyle={viewMode === 'gallery' ? styles.grid : styles.listGrid}
           refreshControl={

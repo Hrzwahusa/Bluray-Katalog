@@ -1,6 +1,6 @@
-import * as FileSystem from 'expo-file-system/legacy'
+import { File, Paths } from 'expo-file-system'
 
-const COVER_CACHE_DIR = `${FileSystem.cacheDirectory}cover-cache/`
+const COVER_CACHE_DIR = `${Paths.cache}cover-cache/`
 
 type CacheCoverOptions = {
   verifyAgainstRemote?: boolean
@@ -56,6 +56,24 @@ export function isLocalCachedCoverUri(uri: string): boolean {
   return uri.startsWith('file://') || uri.startsWith(COVER_CACHE_DIR) || uri.startsWith('/data/') || uri.startsWith('/storage/')
 }
 
+export async function deleteCachedCover(coverUrl: string, title: string): Promise<void> {
+  if (!coverUrl || !/^https?:\/\//i.test(coverUrl)) {
+    return
+  }
+
+  const targetPath = buildCachedCoverPath(coverUrl, title)
+  try {
+    const file = new File(targetPath)
+    if (!file.exists) {
+      return
+    }
+
+    file.delete()
+  } catch {
+    // If the cache entry cannot be removed, the next load will fall back to the existing file.
+  }
+}
+
 async function getRemoteContentLength(coverUrl: string): Promise<number | undefined> {
   try {
     const response = await fetch(coverUrl, { method: 'HEAD' })
@@ -70,10 +88,10 @@ async function getRemoteContentLength(coverUrl: string): Promise<number | undefi
 }
 
 async function shouldRefreshCachedFile(localPath: string, coverUrl: string): Promise<boolean> {
-  const info = await FileSystem.getInfoAsync(localPath)
-  if (!info.exists) return true
+  const file = new File(localPath)
+  if (!file.exists) return true
 
-  const localSize = (info as { size?: number }).size
+  const localSize = file.size
   const remoteSize = await getRemoteContentLength(coverUrl)
   if (!remoteSize || !localSize) {
     return false
@@ -86,12 +104,13 @@ async function downloadCoverWithRetries(coverUrl: string, localPath: string, max
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     try {
       console.log('[cover-cache] download:start', { coverUrl, localPath, attempt: attempt + 1, maxRetries: maxRetries + 1 })
-      const downloaded = await FileSystem.downloadAsync(coverUrl, localPath)
-      if (downloaded.status >= 200 && downloaded.status < 300) {
-        console.log('[cover-cache] download:success', { coverUrl, localPath: downloaded.uri, status: downloaded.status })
-        return downloaded.uri
+      const file = new File(localPath)
+      await File.downloadFileAsync(coverUrl, file, { idempotent: true })
+      if (file.exists) {
+        console.log('[cover-cache] download:success', { coverUrl, localPath: file.uri })
+        return file.uri
       }
-      console.warn('[cover-cache] download:bad-status', { coverUrl, localPath, status: downloaded.status, attempt: attempt + 1 })
+      console.warn('[cover-cache] download:bad-status', { coverUrl, localPath, attempt: attempt + 1 })
     } catch {
       console.warn('[cover-cache] download:error', { coverUrl, localPath, attempt: attempt + 1 })
     }
@@ -109,19 +128,22 @@ export async function getCachedCoverUri(coverUrl: string, title: string, options
   const maxRetries = Number.isFinite(options.maxRetries) ? Math.max(0, options.maxRetries ?? 0) : 0
 
   try {
-    await FileSystem.makeDirectoryAsync(COVER_CACHE_DIR, { intermediates: true })
+    const cacheDir = new File(COVER_CACHE_DIR)
+    if (!cacheDir.exists) {
+      cacheDir.create({ intermediates: true })
+    }
 
-    const existing = await FileSystem.getInfoAsync(targetPath)
+    const existing = new File(targetPath)
     if (existing.exists) {
       if (!verifyAgainstRemote) {
-        console.log('[cover-cache] hit', { coverUrl, targetPath: existing.uri ?? targetPath })
-        return toFileUri(existing.uri ?? targetPath)
+        console.log('[cover-cache] hit', { coverUrl, targetPath: existing.uri })
+        return toFileUri(existing.uri)
       }
 
       const refreshNeeded = await shouldRefreshCachedFile(targetPath, coverUrl)
       if (!refreshNeeded) {
-        console.log('[cover-cache] hit-verified', { coverUrl, targetPath: existing.uri ?? targetPath })
-        return toFileUri(existing.uri ?? targetPath)
+        console.log('[cover-cache] hit-verified', { coverUrl, targetPath: existing.uri })
+        return toFileUri(existing.uri)
       }
 
       console.log('[cover-cache] refresh-needed', { coverUrl, targetPath })
@@ -133,7 +155,7 @@ export async function getCachedCoverUri(coverUrl: string, title: string, options
     }
 
     console.warn('[cover-cache] fallback-remote', { coverUrl, targetPath, hadExisting: existing.exists })
-    return existing.exists ? toFileUri(existing.uri ?? targetPath) : coverUrl
+    return existing.exists ? toFileUri(existing.uri) : coverUrl
   } catch {
     console.warn('[cover-cache] get:error', { coverUrl, targetPath })
     return coverUrl

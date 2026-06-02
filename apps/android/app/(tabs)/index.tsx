@@ -16,7 +16,7 @@ import { resolveWikimediaImageUrls } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
 import { getCachedCoverUri, isLocalCachedCoverUri } from '../../lib/cover-cache'
-import { getCachedMovies, syncStoredMoviesNow } from '../../lib/movie-store'
+import { getCachedMovies, subscribeStoredMoviesChanged, syncStoredMoviesNow } from '../../lib/movie-store'
 
 const LIBRARY_VIEW_MODE_KEY = 'libraryViewMode'
 const ENABLE_LIBRARY_COVERS = true
@@ -336,43 +336,23 @@ export default function LibraryScreen() {
     lastSyncAtRef.current = now
 
     try {
-      const cachedMovies = await normalizeMovieCoverUrls(
-        (await getCachedMovies()).map(normalizeMovieForUi),
-        resolvedCoverUrlCacheRef.current,
-        localCoverFileCacheRef.current
-      )
+      const cachedMovies = (await getCachedMovies()).map(normalizeMovieForUi)
       setMovies(cachedMovies)
       setFiltered(cachedMovies)
       setLoading(false)
       setRefreshing(false)
       setError(null)
 
-      void fillCoverCacheUntilComplete(
-        cachedMovies,
-        resolvedCoverUrlCacheRef.current,
-        localCoverFileCacheRef.current,
-        (progressMovies) => {
-          setMovies(progressMovies)
-          setFiltered(progressMovies)
-        }
-      )
-
-      if (!force) {
-        return
-      }
-
-      setSyncing(true)
-      // Run sync in background and then reload cache to keep UI resilient.
-      syncStoredMoviesNow()
-        .then(async () => {
-          const updated = await normalizeMovieCoverUrls(
-            (await getCachedMovies()).map(normalizeMovieForUi),
+      void (async () => {
+        try {
+          const hydratedMovies = await normalizeMovieCoverUrls(
+            cachedMovies,
             resolvedCoverUrlCacheRef.current,
             localCoverFileCacheRef.current
           )
 
           const completedMovies = await fillCoverCacheUntilComplete(
-            updated,
+            hydratedMovies,
             resolvedCoverUrlCacheRef.current,
             localCoverFileCacheRef.current,
             (progressMovies) => {
@@ -384,6 +364,48 @@ export default function LibraryScreen() {
           setMovies(completedMovies)
           setFiltered(completedMovies)
           setError(null)
+        } catch (coverError) {
+          console.warn('Library cover hydration failed, keeping raw cached movies:', coverError)
+        }
+      })()
+
+      if (!force) {
+        return
+      }
+
+      setSyncing(true)
+      // Run sync in background and then reload cache to keep UI resilient.
+      syncStoredMoviesNow()
+        .then(async () => {
+          const updatedMovies = (await getCachedMovies()).map(normalizeMovieForUi)
+          setMovies(updatedMovies)
+          setFiltered(updatedMovies)
+
+          void (async () => {
+            try {
+              const hydratedMovies = await normalizeMovieCoverUrls(
+                updatedMovies,
+                resolvedCoverUrlCacheRef.current,
+                localCoverFileCacheRef.current
+              )
+
+              const completedMovies = await fillCoverCacheUntilComplete(
+                hydratedMovies,
+                resolvedCoverUrlCacheRef.current,
+                localCoverFileCacheRef.current,
+                (progressMovies) => {
+                  setMovies(progressMovies)
+                  setFiltered(progressMovies)
+                }
+              )
+
+              setMovies(completedMovies)
+              setFiltered(completedMovies)
+              setError(null)
+            } catch (coverError) {
+              console.warn('Library refresh cover hydration failed:', coverError)
+            }
+          })()
         })
         .catch((error) => {
           console.warn('Library refresh sync failed:', error)
@@ -410,6 +432,14 @@ export default function LibraryScreen() {
     didInitialLoadRef.current = true
     // Keep startup as light as possible on low-memory devices/emulators.
     loadMovies()
+  }, [loadMovies])
+
+  useEffect(() => {
+    const unsubscribe = subscribeStoredMoviesChanged(() => {
+      loadMovies()
+    })
+
+    return unsubscribe
   }, [loadMovies])
 
   useEffect(() => {

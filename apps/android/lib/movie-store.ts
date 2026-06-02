@@ -15,6 +15,24 @@ const MOVIES_FILE = new File(Paths.document, 'movies.json')
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000
 const SUPABASE_SYNC_HARD_TIMEOUT_MS = 12000
 let syncInFlightPromise: Promise<Movie[]> | null = null
+const movieStoreListeners = new Set<() => void>()
+
+function notifyMovieStoreChanged(): void {
+  for (const listener of movieStoreListeners) {
+    try {
+      listener()
+    } catch (error) {
+      console.warn('movie-store listener failed:', error)
+    }
+  }
+}
+
+export function subscribeStoredMoviesChanged(listener: () => void): () => void {
+  movieStoreListeners.add(listener)
+  return () => {
+    movieStoreListeners.delete(listener)
+  }
+}
 
 type SupabaseConfig = {
   url: string
@@ -361,6 +379,10 @@ export async function syncStoredMoviesNow(): Promise<Movie[]> {
     }
   })
 
+  void syncTask.then(() => {
+    notifyMovieStoreChanged()
+  })
+
   return raceWithSyncHardTimeout(syncTask, false)
 }
 
@@ -385,6 +407,7 @@ export async function saveStoredMovie(movie: Movie): Promise<Movie> {
     nextMovies.push(storedMovie)
   }
   await writeLocalMovies(nextMovies)
+  notifyMovieStoreChanged()
 
   const config = await getSupabaseConfig()
   if (!config) {
@@ -401,6 +424,7 @@ export async function saveStoredMovie(movie: Movie): Promise<Movie> {
       syncedMovies.push(syncedMovie)
     }
     await writeLocalMovies(syncedMovies)
+    notifyMovieStoreChanged()
     return syncedMovie
   } catch (error) {
     console.warn('Supabase sync for movie failed, keeping local movie:', error)
@@ -416,6 +440,7 @@ export async function deleteStoredMovie(id: string): Promise<void> {
   const localMovies = await readLocalMovies()
   const movieToDelete = localMovies.find((movie) => movie.id === id)
   await writeLocalMovies(localMovies.filter((movie) => movie.id !== id))
+  notifyMovieStoreChanged()
 
   const config = await getSupabaseConfig()
   if (!config || !movieToDelete?.id || !hasSupabaseMovieIdSafe(movieToDelete.id)) {

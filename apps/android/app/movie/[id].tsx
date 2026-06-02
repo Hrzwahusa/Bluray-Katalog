@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { type ReactElement, useCallback, useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -16,11 +16,13 @@ import {
 import { useLocalSearchParams, router } from 'expo-router'
 import {
   resolveWikimediaImageUrls,
+  searchMovieFuzzy,
+  searchMoviePoster,
   TMDB_ATTRIBUTION_NOTICE,
 } from '@bluray-katalog/shared'
-import type { Movie } from '@bluray-katalog/shared'
+import type { Movie, WikidataMovie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
-import { getCachedCoverUri } from '../../lib/cover-cache'
+import { deleteCachedCover, getCachedCoverUri } from '../../lib/cover-cache'
 import { TmdbLogo } from '../../lib/tmdb-logo'
 import { deleteStoredMovie, getCachedMovies, syncStoredMoviesNow, updateStoredMovie } from '../../lib/movie-store'
 
@@ -95,6 +97,10 @@ export default function MovieDetailScreen() {
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [coverSourceUrl, setCoverSourceUrl] = useState<string | null>(null)
+  const [refreshingCover, setRefreshingCover] = useState(false)
+  const [coverCandidates, setCoverCandidates] = useState<WikidataMovie[]>([])
+  const [searchingCoverCandidates, setSearchingCoverCandidates] = useState(false)
   const [form, setForm] = useState({
     title: '',
     original_title: '',
@@ -136,6 +142,7 @@ export default function MovieDetailScreen() {
       const targetId = typeof id === 'string' ? id : ''
       const cached = await getCachedMovies()
       const foundCached = cached.find((entry) => String(entry.id ?? '') === targetId) || null
+      setCoverSourceUrl(foundCached?.cover_url ?? null)
       const hydratedCached = await hydrateMovieCover(foundCached, true)
       setMovie(hydratedCached)
       if (hydratedCached) setFormFromMovie(hydratedCached)
@@ -144,6 +151,7 @@ export default function MovieDetailScreen() {
       syncStoredMoviesNow()
         .then(async (synced) => {
           const foundSynced = synced.find((entry) => String(entry.id ?? '') === targetId) || null
+          setCoverSourceUrl(foundSynced?.cover_url ?? foundCached?.cover_url ?? null)
           const hydratedSynced = await hydrateMovieCover(foundSynced, true)
           if (hydratedSynced) {
             setMovie(hydratedSynced)
@@ -220,6 +228,83 @@ export default function MovieDetailScreen() {
     router.push(`/?filterType=${type}&filterValue=${encoded}`)
   }
 
+  const applySelectedCoverUrl = useCallback(async (posterUrl: string) => {
+    const title = movie?.title?.trim() ?? ''
+    if (!title) {
+      Alert.alert(t('alert.error'), t('movie.refreshCoverSearchError'))
+      return
+    }
+
+    setRefreshingCover(true)
+    setError(null)
+
+    try {
+      const oldSourceUrl = coverSourceUrl ?? movie?.cover_url ?? ''
+      if (/^https?:\/\//i.test(oldSourceUrl)) {
+        await deleteCachedCover(oldSourceUrl, movie?.title || 'cover')
+      }
+
+      // Ensure we always download a fresh local file for the newly selected poster.
+      await deleteCachedCover(posterUrl, movie?.title || 'cover')
+
+      const updated = await updateStoredMovie({
+        ...movie,
+        title,
+        cover_url: posterUrl,
+      })
+
+      setCoverSourceUrl(updated.cover_url ?? posterUrl)
+
+      const refreshed = await hydrateMovieCover({
+        ...updated,
+        cover_url: updated.cover_url ?? posterUrl,
+      }, true)
+
+      if (refreshed) {
+        setMovie(refreshed)
+        setFormFromMovie(refreshed)
+      }
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setRefreshingCover(false)
+    }
+  }, [coverSourceUrl, movie, t])
+
+  const handleRefreshCover = async () => {
+    const title = movie?.title?.trim() ?? ''
+    if (!title) {
+      Alert.alert(t('alert.error'), t('movie.refreshCoverSearchError'))
+      return
+    }
+
+    setSearchingCoverCandidates(true)
+    setError(null)
+    setCoverCandidates([])
+
+    try {
+      const query = movie?.original_title && movie.original_title !== title
+        ? `${movie.original_title} ${movie.year ?? ''}`.trim()
+        : title
+
+      const candidates = await searchMovieFuzzy(query, 'de')
+      const posterCandidates = candidates
+        .filter((entry) => typeof entry.coverUrl === 'string' && entry.coverUrl.length > 0)
+        .slice(0, 10)
+
+      if (posterCandidates.length === 0) {
+        Alert.alert(t('alert.error'), t('movie.refreshCoverSearchError'))
+        return
+      }
+
+      setCoverCandidates(posterCandidates)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSearchingCoverCandidates(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!movie?.id) return
     if (!form.title.trim()) {
@@ -290,6 +375,54 @@ export default function MovieDetailScreen() {
         ) : (
           <View style={[styles.cover, styles.coverPlaceholder]}>
             <Text style={{ fontSize: 48 }}>🎬</Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.btn, styles.btnSecondary, styles.coverRefreshBtn]}
+          disabled={refreshingCover || searchingCoverCandidates}
+          onPress={handleRefreshCover}
+        >
+          <Text style={styles.btnText}>
+            {refreshingCover
+              ? t('movie.refreshingCover')
+              : searchingCoverCandidates
+                ? t('movie.searchingCoverCandidates')
+                : t('movie.refreshCover')}
+          </Text>
+        </TouchableOpacity>
+
+        {coverCandidates.length > 0 && (
+          <View style={styles.coverCandidatesWrap}>
+            <Text style={styles.coverCandidatesTitle}>{t('movie.coverCandidatesTitle')}</Text>
+            {coverCandidates.map((candidate) => (
+              <TouchableOpacity
+                key={`${candidate.wikidataId}-${candidate.coverUrl}`}
+                style={styles.coverCandidateBtn}
+                disabled={refreshingCover}
+                onPress={() => {
+                  const selectedUrl = candidate.coverUrl
+                  if (!selectedUrl) return
+                  setCoverCandidates([])
+                  void applySelectedCoverUrl(selectedUrl)
+                }}
+              >
+                <Text style={styles.coverCandidateTitle} numberOfLines={2}>
+                  {candidate.title}
+                </Text>
+                <Text style={styles.coverCandidateMeta} numberOfLines={1}>
+                  {[candidate.year ? String(candidate.year) : undefined, candidate.originalTitle]
+                    .filter(Boolean)
+                    .join(' | ') || '-'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.btn, styles.btnSecondary, styles.coverCandidatesCancelBtn]}
+              onPress={() => setCoverCandidates([])}
+            >
+              <Text style={styles.btnText}>{t('movie.cancel')}</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -427,13 +560,13 @@ function EditField({
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactElement | ReactElement[] | null }) {
   return (
     <View style={{ marginTop: 20 }}>
       <Text style={{ color: '#64748b', fontSize: 12, fontWeight: '600', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
         {title}
       </Text>
-      {children}
+      {children as any}
     </View>
   )
 }
@@ -455,6 +588,27 @@ const styles = StyleSheet.create({
   errorText: { color: '#fca5a5', backgroundColor: '#450a0a', borderColor: '#7f1d1d', borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
   cover: { width: '100%', height: 300, borderRadius: 12, backgroundColor: '#1e293b', marginBottom: 16 },
   coverPlaceholder: { justifyContent: 'center', alignItems: 'center' },
+  coverRefreshBtn: { flex: 0, marginBottom: 8 },
+  coverCandidatesWrap: {
+    backgroundColor: '#111827',
+    borderColor: '#334155',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    marginBottom: 8,
+  },
+  coverCandidatesTitle: { color: '#cbd5e1', fontWeight: '700', fontSize: 14 },
+  coverCandidateBtn: {
+    backgroundColor: '#1f2937',
+    borderColor: '#334155',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+  },
+  coverCandidateTitle: { color: '#e2e8f0', fontWeight: '600', fontSize: 14 },
+  coverCandidateMeta: { color: '#94a3b8', fontSize: 12, marginTop: 3 },
+  coverCandidatesCancelBtn: { marginTop: 2 },
   title: { color: '#fff', fontSize: 24, fontWeight: 'bold', lineHeight: 30 },
   originalTitle: { color: '#94a3b8', fontSize: 16, marginTop: 4 },
   fieldLabel: { color: '#64748b', fontSize: 12, marginBottom: 4 },

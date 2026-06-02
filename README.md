@@ -108,17 +108,58 @@ cd apps/android
 eas build --platform android
 ```
 
-Lokaler Release-Build (ohne EAS Queue, Windows):
+Lokaler Release-Build (AAB, ohne EAS Queue, Windows):
 
 ```bash
 npm run android:build:production:local
 ```
 
+Direkter lokaler Release-APK-Build:
+
+```bash
+cd apps/android/android
+./gradlew.bat assembleRelease
+```
+
 ## Releases
 
-- Desktop-Pakete lassen sich mit `npm run desktop:package` erzeugen.
-- Android-Builds lassen sich mit EAS über `eas build --platform android` erzeugen.
-- Für GitHub Releases empfiehlt sich, die erzeugten Desktop-Artefakte oder Android-Builds erst nach einem verifizierten Tag hochzuladen und nicht im Repository selbst zu versionieren.
+### Android Release-APK (für GitHub Release)
+
+```bash
+cd apps/android/android
+./gradlew.bat assembleRelease
+```
+
+Output:
+
+`apps/android/android/app/build/outputs/apk/release/app-release.apk`
+
+### Android AAB (für Play Console)
+
+```bash
+cd apps/android/android
+./gradlew.bat bundleRelease
+```
+
+Output:
+
+`apps/android/android/app/build/outputs/bundle/release/app-release.aab`
+
+### Desktop Windows Release
+
+```bash
+npm run desktop:package:portable
+```
+
+Output:
+
+`apps/desktop/release/BluRay-Katalog-win-unpacked.zip`
+
+Hinweise:
+
+- Für GitHub Releases nur Desktop-Artefakt(e) und APK hochladen.
+- Die AAB ist für die Play Console und sollte nicht im GitHub Release landen.
+- Optional können Android-Releases weiterhin über EAS gebaut werden (`eas build --platform android`).
 
 ## Technologie-Stack
 

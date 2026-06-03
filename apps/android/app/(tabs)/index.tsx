@@ -16,7 +16,7 @@ import { resolveWikimediaImageUrls } from '@bluray-katalog/shared'
 import type { Movie } from '@bluray-katalog/shared'
 import { useI18n } from '../../lib/i18n'
 import { getCachedCoverUri, isLocalCachedCoverUri } from '../../lib/cover-cache'
-import { getCachedMovies, subscribeStoredMoviesChanged, syncStoredMoviesNow } from '../../lib/movie-store'
+import { getCachedMovies, subscribeStoredMoviesChanged, subscribeSyncStatus, syncStoredMoviesNow } from '../../lib/movie-store'
 
 const LIBRARY_VIEW_MODE_KEY = 'libraryViewMode'
 const ENABLE_LIBRARY_COVERS = true
@@ -441,6 +441,13 @@ export default function LibraryScreen() {
 
     return unsubscribe
   }, [loadMovies])
+
+  useEffect(() => {
+    const unsubscribe = subscribeSyncStatus((isSyncing) => {
+      setSyncing(isSyncing)
+    })
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     if (!refreshKey) return

@@ -22,8 +22,8 @@ interface ElectronAPI {
       posterHints?: string[]
     } | null
   }>
-  searchMovies: (query: string, language?: string) => Promise<import('../../../../packages/shared/src/types').WikidataMovie[]>
-  getWikipediaDetails: (title: string, language: string) => Promise<{ coverUrl?: string; description?: string }>
+  searchMovies: (query: string, language?: string) => Promise<import('../../../../packages/shared/src/types').TmdbMovie[]>
+  getTmdbDetails: (title: string, language: string) => Promise<{ coverUrl?: string; description?: string }>
   searchMoviePoster: (title: string, year?: number, originalTitle?: string) => Promise<string | undefined>
 }
 

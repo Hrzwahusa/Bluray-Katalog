@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // TMDB-Suche (läuft im Main-Prozess, kein CORS-Problem)
   searchMovies: (query: string, language?: string) => ipcRenderer.invoke('tmdb:search', query, language),
-  getWikipediaDetails: (title: string, language: string) =>
+  getTmdbDetails: (title: string, language: string) =>
     ipcRenderer.invoke('tmdb:details', title, language),
   searchMoviePoster: (title: string, year?: number, originalTitle?: string) =>
     ipcRenderer.invoke('tmdb:poster', title, year, originalTitle),

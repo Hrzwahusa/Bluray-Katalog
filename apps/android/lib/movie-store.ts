@@ -15,7 +15,30 @@ const MOVIES_FILE = new File(Paths.document, 'movies.json')
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000
 const SUPABASE_SYNC_HARD_TIMEOUT_MS = 12000
 let syncInFlightPromise: Promise<Movie[]> | null = null
+let syncIsInProgress = false
 const movieStoreListeners = new Set<() => void>()
+const syncStatusListeners = new Set<(syncing: boolean) => void>()
+
+function notifySyncStatus(syncing: boolean): void {
+  syncIsInProgress = syncing
+  for (const listener of syncStatusListeners) {
+    try {
+      listener(syncing)
+    } catch (error) {
+      console.warn('movie-store sync status listener failed:', error)
+    }
+  }
+}
+
+export function subscribeSyncStatus(listener: (syncing: boolean) => void): () => void {
+  syncStatusListeners.add(listener)
+  if (syncIsInProgress) {
+    try { listener(true) } catch {}
+  }
+  return () => {
+    syncStatusListeners.delete(listener)
+  }
+}
 
 function notifyMovieStoreChanged(): void {
   for (const listener of movieStoreListeners) {
@@ -362,6 +385,8 @@ export async function syncStoredMoviesNow(): Promise<Movie[]> {
     return raceWithSyncHardTimeout(syncInFlightPromise, true)
   }
 
+  notifySyncStatus(true)
+
   const syncTask = (async () => {
     const localMovies = await readLocalMovies()
     const syncedMovies = await syncMoviesIfConfigured(localMovies)
@@ -370,13 +395,14 @@ export async function syncStoredMoviesNow(): Promise<Movie[]> {
   })().catch(async (error) => {
     console.warn('Supabase sync failed unexpectedly, using cached local movies:', error)
     return readLocalMovies()
-  })()
+  })
 
   syncInFlightPromise = syncTask
   syncTask.finally(() => {
     if (syncInFlightPromise === syncTask) {
       syncInFlightPromise = null
     }
+    notifySyncStatus(false)
   })
 
   void syncTask.then(() => {

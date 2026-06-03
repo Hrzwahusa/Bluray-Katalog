@@ -1,4 +1,4 @@
-import type { WikidataMovie } from './types'
+import type { TmdbMovie } from './types'
 
 const TMDB_API_BASE = 'https://api.themoviedb.org/3'
 const TMDB_TOKEN_MASK_PARTS = ['tm', 'db', '-v', '6-', 's']
@@ -58,8 +58,7 @@ export const TMDB_ATTRIBUTION_NOTICE =
 export const TMDB_ATTRIBUTION_NOTICE_DE =
   'Diese App nutzt TMDB und die TMDB APIs, ist aber nicht von TMDB unterstützt, zertifiziert oder anderweitig freigegeben.'
 
-export const TMDB_LOGO_URL =
-  'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_long_2-9665a76b1ae401a510ec1e0ca40ddcb3b0cfe45f1d51b77a308fea0845885648.svg'
+// ── Typen ────────────────────────────────────────────────────────────────────
 
 type TmdbSearchMovie = {
   id: number
@@ -68,9 +67,7 @@ type TmdbSearchMovie = {
   overview?: string
   release_date?: string
   poster_path?: string | null
-  original_language?: string
   popularity?: number
-  vote_average?: number
   adult?: boolean
 }
 
@@ -95,6 +92,8 @@ type TmdbMovieDetails = {
     imdb_id?: string | null
   }
 }
+
+// ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -134,192 +133,12 @@ function getTmdbLanguage(language = 'de'): string {
   return language.includes('-') ? language : `${language}-US`
 }
 
-function normalizeSearchText(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-}
-
-function applyTitleAliases(value: string): string[] {
-  const variants = new Set<string>([value])
-  const lower = value.toLowerCase()
-
-  if (lower.includes('dark kingdom')) {
-    variants.add(value.replace(/dark kingdom/gi, 'Dark World'))
-  }
-
-  if (lower.includes('säulen der erde') || lower.includes('saulen der erde')) {
-    variants.add('Die Säulen der Erde')
-    variants.add('The Pillars of the Earth')
-  }
-
-  return Array.from(variants)
-}
-
-function buildFranchiseTitleVariants(value: string): string[] {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  const variants = new Set<string>()
-
-  const spiderMatch = normalized.match(/^spider(?:[- ]?man)\s+(.+)$/i)
-  if (spiderMatch?.[1]) variants.add(`Spider-Man: ${spiderMatch[1].trim()}`)
-
-  const thorMatch = normalized.match(/^thor\s+(.+)$/i)
-  if (thorMatch?.[1]) variants.add(`Thor: ${thorMatch[1].trim()}`)
-
-  return Array.from(variants)
-}
-
-function buildSearchTerms(query: string): string[] {
-  const raw = query.trim()
-  if (!raw) return []
-
-  const terms = new Set<string>()
-  const cleaned = raw.replace(/[.,!?]+$/g, '').trim()
-  const aliasVariants = applyTitleAliases(cleaned)
-  const franchiseVariants = buildFranchiseTitleVariants(cleaned)
-
-  const baseVariants: string[] = []
-  for (const source of aliasVariants) {
-    baseVariants.push(
-      source,
-      source.replace(/[:|]/g, ' '),
-      source.replace(/[-\u2010-\u2015]/g, ' '),
-      source.replace(/[-\u2010-\u2015]/g, '')
-    )
-  }
-
-  for (const variant of [...franchiseVariants, ...baseVariants]) {
-    const normalized = variant.replace(/\s+/g, ' ').trim()
-    if (normalized) terms.add(normalized)
-  }
-
-  const queryTokens = normalizeSearchText(cleaned).split(' ').filter(Boolean)
-  if (queryTokens.length === 1 && queryTokens[0].length >= 3) {
-    const franchise = queryTokens[0]
-    terms.add(`${franchise} 2`)
-    terms.add(`${franchise} 3`)
-    terms.add(`${franchise} 4`)
-  }
-
-  const queryNorm = normalizeSearchText(cleaned)
-  if (queryNorm.includes('thor') && (queryNorm.includes('dark kingdom') || queryNorm.includes('dark world'))) {
-    terms.add('thor 2')
-  }
-
-  for (const variant of Array.from(terms).slice(0, 3)) {
-    terms.add(`${variant} film`)
-  }
-
-  return Array.from(terms).slice(0, 9)
-}
-
-function extractQueryYear(query: string): number | undefined {
-  const match = query.match(/\b(19\d{2}|20\d{2})\b/)
-  if (!match) return undefined
-  const year = Number.parseInt(match[1], 10)
-  return Number.isFinite(year) ? year : undefined
-}
-
 function parseYear(value?: string): number | undefined {
-  if (!value || typeof value !== 'string') return undefined
+  if (!value) return undefined
   const match = value.match(/^(\d{4})-/)
   if (!match) return undefined
   const year = Number.parseInt(match[1], 10)
   return Number.isFinite(year) ? year : undefined
-}
-
-function scoreMovieMatch(movie: TmdbSearchMovie, queryNorm: string, queryTokens: string[], queryYear?: number): number {
-  const titleNorm = normalizeSearchText(movie.title ?? '')
-  const originalNorm = normalizeSearchText(movie.original_title ?? '')
-  const haystacks = [titleNorm, originalNorm].filter(Boolean)
-
-  let score = 0
-
-  if (haystacks.some((value) => value === queryNorm)) score += 220
-  if (haystacks.some((value) => value.startsWith(queryNorm))) score += 130
-  if (haystacks.some((value) => value.includes(queryNorm))) score += 90
-
-  const tokenHits = queryTokens.filter((token) => haystacks.some((value) => value.includes(token))).length
-  score += tokenHits * 22
-
-  if (movie.poster_path) score += 10
-  if (movie.adult) score -= 50
-
-  const releaseYear = parseYear(movie.release_date)
-  if (queryYear && releaseYear) {
-    const diff = Math.abs(queryYear - releaseYear)
-    if (diff === 0) score += 45
-    else if (diff === 1) score += 20
-    else if (diff <= 2) score += 8
-    else score -= Math.min(diff * 2, 30)
-  }
-
-  return score
-}
-
-async function fetchTmdbSearchResults(query: string, language: string): Promise<TmdbSearchMovie[]> {
-  const searchTerms = buildSearchTerms(query)
-  const searchLanguages = Array.from(new Set([getTmdbLanguage(language), 'en-US']))
-  const resultsById = new Map<number, TmdbSearchMovie>()
-  let successfulSearchRequests = 0
-
-  for (const searchLanguage of searchLanguages) {
-    for (const searchTerm of searchTerms) {
-      const params = new URLSearchParams({
-        query: searchTerm,
-        language: searchLanguage,
-        include_adult: 'false',
-        page: '1',
-      })
-
-      try {
-        const response = await fetchWithRetry(`${TMDB_API_BASE}/search/movie?${params}`, {
-          headers: {
-            Authorization: getTmdbAuthHeader(),
-            Accept: 'application/json',
-          },
-        })
-
-        if (!response.ok) continue
-
-        const data = (await response.json()) as TmdbSearchResponse
-        successfulSearchRequests++
-
-        for (const movie of data.results ?? []) {
-          if (!movie?.id || !movie.title) continue
-          if (!resultsById.has(movie.id)) resultsById.set(movie.id, movie)
-        }
-      } catch {
-        // Andere Varianten weiter probieren.
-      }
-    }
-  }
-
-  if (successfulSearchRequests === 0) {
-    throw new Error('TMDB-Suchfehler: Keine Suchanfrage erfolgreich (Rate-Limit). Bitte kurz erneut versuchen.')
-  }
-
-  return Array.from(resultsById.values())
-}
-
-async function fetchTmdbMovieDetails(id: number, language: string): Promise<TmdbMovieDetails | null> {
-  const params = new URLSearchParams({
-    language: getTmdbLanguage(language),
-    append_to_response: 'credits,external_ids',
-  })
-
-  const response = await fetchWithRetry(`${TMDB_API_BASE}/movie/${id}?${params}`, {
-    headers: {
-      Authorization: getTmdbAuthHeader(),
-      Accept: 'application/json',
-    },
-  })
-
-  if (!response.ok) return null
-  return (await response.json()) as TmdbMovieDetails
 }
 
 function tmdbPosterUrl(posterPath?: string | null, width = 500): string | undefined {
@@ -328,23 +147,24 @@ function tmdbPosterUrl(posterPath?: string | null, width = 500): string | undefi
   return `https://image.tmdb.org/t/p/${size}${posterPath}`
 }
 
-function movieFromSearchResult(movie: TmdbSearchMovie): WikidataMovie {
+function movieFromSearchResult(movie: TmdbSearchMovie): TmdbMovie {
+  const id = String(movie.id)
   return {
-    wikidataId: String(movie.id),
+    tmdbId: id,
     title: movie.title ?? '',
-    originalTitle: movie.original_title && movie.original_title !== movie.title ? movie.original_title : undefined,
+    originalTitle: movie.original_title && movie.original_title !== movie.title
+      ? movie.original_title
+      : undefined,
     year: parseYear(movie.release_date),
     genres: [],
     cast: [],
-    director: undefined,
     description: movie.overview || undefined,
     coverUrl: tmdbPosterUrl(movie.poster_path),
-    imdbId: undefined,
-    runtime: undefined,
   }
 }
 
-function movieFromDetails(movie: TmdbMovieDetails): WikidataMovie {
+function movieFromDetails(movie: TmdbMovieDetails): TmdbMovie {
+  const id = String(movie.id)
   const cast = (movie.credits?.cast ?? [])
     .map((entry) => entry.name?.trim())
     .filter((entry): entry is string => Boolean(entry))
@@ -355,131 +175,106 @@ function movieFromDetails(movie: TmdbMovieDetails): WikidataMovie {
     ?.name?.trim()
 
   return {
-    wikidataId: String(movie.id),
+    tmdbId: id,
     title: movie.title ?? '',
-    originalTitle: movie.original_title && movie.original_title !== movie.title ? movie.original_title : undefined,
+    originalTitle: movie.original_title && movie.original_title !== movie.title
+      ? movie.original_title
+      : undefined,
     year: parseYear(movie.release_date),
-    genres: (movie.genres ?? []).map((entry) => entry.name?.trim()).filter((entry): entry is string => Boolean(entry)),
+    genres: (movie.genres ?? [])
+      .map((entry) => entry.name?.trim())
+      .filter((entry): entry is string => Boolean(entry)),
     cast,
     director: director || undefined,
     description: movie.overview || undefined,
     coverUrl: tmdbPosterUrl(movie.poster_path),
     imdbId: movie.external_ids?.imdb_id || undefined,
-    runtime: typeof movie.runtime === 'number' && Number.isFinite(movie.runtime) ? Math.round(movie.runtime) : undefined,
+    runtime: typeof movie.runtime === 'number' && Number.isFinite(movie.runtime)
+      ? Math.round(movie.runtime)
+      : undefined,
   }
 }
 
-function scoreTmdbMovieMatch(movie: WikidataMovie, queryNorm: string, queryTokens: string[]): number {
-  const titleNorm = normalizeSearchText(movie.title)
-  const originalNorm = normalizeSearchText(movie.originalTitle ?? '')
-  const descriptionNorm = normalizeSearchText(movie.description ?? '')
-  const haystacks = [titleNorm, originalNorm].filter(Boolean)
+// ── Öffentliche API ───────────────────────────────────────────────────────────
 
-  let score = 0
-
-  if (haystacks.some((value) => value === queryNorm)) score += 220
-  if (haystacks.some((value) => value.startsWith(queryNorm))) score += 130
-  if (haystacks.some((value) => value.includes(queryNorm))) score += 90
-
-  const tokenHits = queryTokens.filter((token) => haystacks.some((value) => value.includes(token))).length
-  score += tokenHits * 22
-
-  if (descriptionNorm.includes('film')) score += 10
-  if (descriptionNorm.includes('movie')) score += 8
-
-  if (/episode|character|comic|album|soundtrack|disambiguation/.test(descriptionNorm)) {
-    score -= 120
-  }
-
-  return score
-}
-
-async function findBestTmdbMatch(query: string, language = 'de'): Promise<{ movie: WikidataMovie; score: number } | null> {
-  const searchResults = await fetchTmdbSearchResults(query, language)
-  if (!searchResults.length) return null
-
-  const queryNorm = normalizeSearchText(query)
-  const queryTokens = queryNorm.split(' ').filter(Boolean)
-  const queryYear = extractQueryYear(query)
-
-  const scoredResults = searchResults
-    .map((movie) => ({ movie, score: scoreMovieMatch(movie, queryNorm, queryTokens, queryYear) }))
-    .sort((a, b) => {
-      if (a.score !== b.score) return b.score - a.score
-      const aYear = parseYear(a.movie.release_date) ?? 0
-      const bYear = parseYear(b.movie.release_date) ?? 0
-      if (aYear !== bYear) return bYear - aYear
-      return (b.movie.popularity ?? 0) - (a.movie.popularity ?? 0)
-    })
-
-  const best = scoredResults[0]
-  if (!best) return null
-
-  const details = await fetchTmdbMovieDetails(best.movie.id, language)
-  if (details) {
-    return { movie: movieFromDetails(details), score: best.score }
-  }
-
-  return { movie: movieFromSearchResult(best.movie), score: best.score }
-}
-
-export async function searchMovieFuzzy(query: string, language = 'de'): Promise<WikidataMovie[]> {
-  const searchResults = await fetchTmdbSearchResults(query, language)
-  if (!searchResults.length) return []
-
-  const queryNorm = normalizeSearchText(query)
-  const queryTokens = queryNorm.split(' ').filter(Boolean)
-  const queryYear = extractQueryYear(query)
-
-  const scoredResults = searchResults
-    .map((movie) => ({ movie, score: scoreMovieMatch(movie, queryNorm, queryTokens, queryYear) }))
-    .sort((a, b) => {
-      if (a.score !== b.score) return b.score - a.score
-      const aYear = parseYear(a.movie.release_date) ?? 0
-      const bYear = parseYear(b.movie.release_date) ?? 0
-      if (aYear !== bYear) return bYear - aYear
-      return (b.movie.popularity ?? 0) - (a.movie.popularity ?? 0)
-    })
-    .slice(0, 20)
-
-  const results: WikidataMovie[] = []
-
-  for (const entry of scoredResults) {
-    const details = await fetchTmdbMovieDetails(entry.movie.id, language)
-    results.push(details ? movieFromDetails(details) : movieFromSearchResult(entry.movie))
-  }
-
-  return results.sort((a, b) => {
-    const aScore = scoreTmdbMovieMatch(a, queryNorm, queryTokens)
-    const bScore = scoreTmdbMovieMatch(b, queryNorm, queryTokens)
-    if (aScore !== bScore) return bScore - aScore
-    if ((a.year ?? 0) !== (b.year ?? 0)) return (b.year ?? 0) - (a.year ?? 0)
-    return a.title.localeCompare(b.title)
+/**
+ * Sucht Filme auf TMDB anhand eines Titels.
+ * Gibt eine Liste von Treffern zurück (ohne Detail-Requests).
+ * Der User wählt danach manuell den richtigen Film aus.
+ */
+export async function searchMovieFuzzy(query: string, language = 'de'): Promise<TmdbMovie[]> {
+  const params = new URLSearchParams({
+    query: query.trim(),
+    language: getTmdbLanguage(language),
+    include_adult: 'false',
+    page: '1',
   })
+
+  const response = await fetchWithRetry(`${TMDB_API_BASE}/search/movie?${params}`, {
+    headers: {
+      Authorization: getTmdbAuthHeader(),
+      Accept: 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error('TMDB-Ratelimit: Zu viele Anfragen. Bitte kurz warten.')
+    }
+    throw new Error(`TMDB-Suchfehler: ${response.status}`)
+  }
+
+  const data = (await response.json()) as TmdbSearchResponse
+
+  return (data.results ?? [])
+    .filter((movie) => movie?.id && movie.title && !movie.adult)
+    .map(movieFromSearchResult)
 }
 
-export async function getTmdbDetails(
-  title: string,
-  language = 'de'
-): Promise<{ coverUrl?: string; description?: string }> {
-  const match = await findBestTmdbMatch(title, language)
-  if (!match) return {}
-  return { coverUrl: match.movie.coverUrl, description: match.movie.description }
-}
+/**
+ * Holt vollständige Details (Cast, Crew, Genres, IMDb-ID) für einen
+ * bereits ausgewählten Film. Wird erst nach der manuellen Auswahl aufgerufen.
+ */
+export async function getMovieDetails(tmdbId: string, language = 'de'): Promise<TmdbMovie | null> {
+  const params = new URLSearchParams({
+    language: getTmdbLanguage(language),
+    append_to_response: 'credits,external_ids',
+  })
 
-export { getTmdbDetails as getWikipediaDetails }
+  const response = await fetchWithRetry(`${TMDB_API_BASE}/movie/${tmdbId}?${params}`, {
+    headers: {
+      Authorization: getTmdbAuthHeader(),
+      Accept: 'application/json',
+    },
+  })
+
+  if (!response.ok) return null
+
+  const data = (await response.json()) as TmdbMovieDetails
+  return movieFromDetails(data)
+}
 
 export async function searchMoviePoster(
   title: string,
   year?: number,
-  originalTitle?: string
+  originalTitle?: string,
 ): Promise<string | undefined> {
-  const query = originalTitle && originalTitle !== title ? `${originalTitle} ${year ?? ''}`.trim() : title
-  const match = await findBestTmdbMatch(query, 'de')
-  return match?.movie.coverUrl
+  const query = (originalTitle && originalTitle !== title
+    ? `${originalTitle} ${year ?? ''}`.trim()
+    : title)
+  const results = await searchMovieFuzzy(query)
+  return results[0]?.coverUrl
 }
 
-export { searchMovieFuzzy as searchMovieOnWikidata }
+export async function getTmdbDetails(
+  title: string,
+  language = 'de',
+): Promise<{ coverUrl?: string; description?: string }> {
+  const results = await searchMovieFuzzy(title, language)
+  const best = results[0]
+  if (!best) return {}
+  return { coverUrl: best.coverUrl, description: best.description }
+}
 
 export function getWikimediaThumbnail(imageUrl: string, width = 300): string {
   if (!imageUrl) return ''

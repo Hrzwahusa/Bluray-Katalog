@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import type { AppSettings } from '../App'
 import { Check, AlertCircle } from '../components/Icons'
-import { TMDB_ATTRIBUTION_NOTICE } from '@shared/wikidata'
+import { TMDB_ATTRIBUTION_NOTICE } from '@shared/tmdb'
 import tmdbLogo from '../assets/tmdb-logo.svg'
 import { useI18n } from '../i18n'
 

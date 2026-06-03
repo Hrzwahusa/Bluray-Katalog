@@ -1,15 +1,10 @@
 <de-DE>
-• Bibliothek verbessert: Cover werden lokal zwischengespeichert und robuster geladen.
-• Deutlich weniger Platzhalter in der Galerie durch verbessertes Nachladen und Cache-Handling.
-• Cover reload in Filmdetails hinzugefügt
-• Bug Fixes: - Bibliothek wird direkt beim hinzufügen neuer Titel neu geladen.
-             - Buttons im Scan flow vergrößert
-             
+• Supabase-Sync behoben: Beim ersten Eintragen der Zugangsdaten wurde die Bibliothek nicht automatisch synchronisiert.
+• Bibliothek zeigt jetzt einen Sync-Hinweis, wenn Supabase im Hintergrund synchronisiert (z. B. direkt nach dem Speichern der Einstellungen).
+• Nicht verwendete Abhängigkeit (MLKit OCR) entfernt – kleinere App-Größe.
 </de-DE>
 <en-US>
-• Improved library behavior: covers are now cached locally and loaded more reliably.
-• Significantly fewer placeholder tiles in gallery view due to better retry and cache handling.
-• Added cover reload to movie details
-• Bug Fixes: - Library will now reload if a new title is added without pressing a button or reloading the library.
-             - enlarged buttons in scan flow
+• Fixed Supabase sync: the library was not automatically synced when entering credentials for the first time.
+• Library now shows a sync indicator while Supabase is syncing in the background (e.g. right after saving settings).
+• Removed unused dependency (MLKit OCR) – smaller app size.
 </en-US>

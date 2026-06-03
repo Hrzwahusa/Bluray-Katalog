@@ -18,8 +18,8 @@ export interface Movie {
   updated_at?: string
 }
 
-export interface WikidataMovie {
-  wikidataId: string
+export interface TmdbMovie {
+  tmdbId: string
   title: string
   originalTitle?: string
   year?: number
@@ -39,5 +39,5 @@ export interface OcrResult {
 
 export interface SearchResult {
   query: string
-  results: WikidataMovie[]
+  results: TmdbMovie[]
 }

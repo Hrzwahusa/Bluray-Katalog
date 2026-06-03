@@ -1,9 +1,8 @@
 import { app, BrowserWindow, ipcMain, shell, session } from 'electron'
 import { join } from 'path'
-import { createWorker } from 'tesseract.js'
 import { GoogleGenAI } from '@google/genai'
 import ElectronStore from 'electron-store'
-import { searchMovieFuzzy, getWikipediaDetails, searchMoviePoster } from '@shared/wikidata'
+import { searchMovieFuzzy, getTmdbDetails, searchMoviePoster } from '@shared/tmdb'
 import type { Movie } from '@shared/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -79,19 +78,6 @@ function parseGeminiMovieGuess(raw: string): GeminiMovieGuess | null {
     return plainTitle ? { title: plainTitle } : null
   }
 }
-
-function scoreOcrText(text: string): number {
-  const normalized = text.replace(/\s+/g, ' ').trim()
-  if (!normalized) return Number.NEGATIVE_INFINITY
-
-  const alphaCount = (normalized.match(/[A-Za-zÄÖÜäöüß]/g) ?? []).length
-  const digitCount = (normalized.match(/\d/g) ?? []).length
-  const noiseCount = (normalized.match(/[^A-Za-zÄÖÜäöüß0-9\s:'\-–—&().]/g) ?? []).length
-  const lineCount = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length
-
-  return alphaCount + lineCount * 4 - digitCount * 2 - noiseCount * 3
-}
-
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
@@ -189,7 +175,7 @@ ipcMain.handle('movies:set-local', (_, movies: Movie[]) => {
   return true
 })
 
-// ─── IPC Handler: OCR mit Gemini (primär) oder Tesseract (Fallback) ─
+// ─── IPC Handler: OCR mit Gemini ─
 ipcMain.handle('ocr:recognize', async (_, imageBase64: string) => {
   if (!imageBase64 || imageBase64.length < 100) {
     return { text: '', confidence: 0, error: 'Kein gültiges Bild übergeben.' }
@@ -232,44 +218,11 @@ ipcMain.handle('ocr:recognize', async (_, imageBase64: string) => {
     } catch (e) {
       const err = e as Error
       console.error('[Gemini] Fehler:', err.name, err.message)
-      // Fallthrough zu Tesseract
+      return { text: '', confidence: 0, error: err.message }
     }
   }
 
-  // ── Tesseract Fallback ───────────────────────────────────────────
-  const worker = await createWorker(['deu', 'eng'], 1)
-  try {
-    const buffer = Buffer.from(base64Data, 'base64')
-    const passes = [6, 11]
-    let bestText = ''
-    let bestScore = Number.NEGATIVE_INFINITY
-    let bestConfidence = 0
-
-    for (const psm of passes) {
-      await worker.setParameters({
-        tessedit_pageseg_mode: String(psm),
-        preserve_interword_spaces: '1',
-      })
-      const { data } = await worker.recognize(buffer)
-      const candidateText = data.text.trim()
-      const candidateScore = scoreOcrText(candidateText)
-
-      if (candidateScore > bestScore) {
-        bestScore = candidateScore
-        bestText = candidateText
-        bestConfidence = data.confidence
-      }
-    }
-
-    return {
-      text: bestText,
-      confidence: bestConfidence,
-    }
-  } catch (e) {
-    return { text: '', confidence: 0, error: (e as Error).message }
-  } finally {
-    await worker.terminate()
-  }
+  return { text: '', confidence: 0, error: 'Kein Gemini API-Key konfiguriert.' }
 })
 
 // ─── IPC Handler: TMDB-Suche ────────────────────────────────────────
@@ -278,7 +231,7 @@ ipcMain.handle('tmdb:search', async (_, query: string, language?: string) => {
 })
 
 ipcMain.handle('tmdb:details', async (_, title: string, language: string) => {
-  return await getWikipediaDetails(title, language)
+  return await getTmdbDetails(title, language)
 })
 
 ipcMain.handle('tmdb:poster', async (_, title: string, year?: number, originalTitle?: string) => {

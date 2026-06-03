@@ -23,7 +23,7 @@ function getIdentityKeys(movie: Movie): string[] {
   }
 
   if (movie.wikidata_id) {
-    keys.push(`wikidata:${movie.wikidata_id}`)
+    keys.push(`tmdb:${movie.wikidata_id}`)
   }
 
   const fingerprint = buildFingerprint(movie)

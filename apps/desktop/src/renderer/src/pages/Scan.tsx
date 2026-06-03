@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import type { AppSettings } from '../App'
-import type { WikidataMovie } from '@shared/types'
-import { TMDB_ATTRIBUTION_NOTICE } from '@shared/wikidata'
+import type { TmdbMovie } from '@shared/types'
+import { TMDB_ATTRIBUTION_NOTICE } from '@shared/tmdb'
 
 import { Camera, X, Check, Loader, AlertCircle, Search } from '../components/Icons'
 import tmdbLogo from '../assets/tmdb-logo.svg'
@@ -47,10 +47,11 @@ type CoverOption = {
   url: string
 }
 
-function buildGeminiFallbackCandidate(guess: GeminiMovieGuess): WikidataMovie | null {
+function buildGeminiFallbackCandidate(guess: GeminiMovieGuess): TmdbMovie | null {
   if (!guess.title) return null
+  const id = `gemini:${guess.title.toLowerCase().replace(/\s+/g, '-')}`
   return {
-    wikidataId: `gemini:${guess.title.toLowerCase().replace(/\s+/g, '-')}`,
+    tmdbId: id,
     title: guess.title,
     originalTitle: guess.originalTitle,
     year: guess.year,
@@ -165,8 +166,8 @@ export function Scan({ settings, onSuccess }: ScanProps) {
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
   const [ocrText, setOcrText] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [candidates, setCandidates] = useState<WikidataMovie[]>([])
-  const [selectedMovie, setSelectedMovie] = useState<WikidataMovie | null>(null)
+  const [candidates, setCandidates] = useState<TmdbMovie[]>([])
+  const [selectedMovie, setSelectedMovie] = useState<TmdbMovie | null>(null)
   const [geminiGuess, setGeminiGuess] = useState<GeminiMovieGuess | null>(null)
   const [coverOptions, setCoverOptions] = useState<CoverOption[]>([])
   const [selectedCoverUrl, setSelectedCoverUrl] = useState<string>('')
@@ -364,8 +365,9 @@ export function Scan({ settings, onSuccess }: ScanProps) {
       return
     }
 
-    const movie: WikidataMovie = {
-      wikidataId: `manual:${Date.now()}`,
+    const manualId = `manual:${Date.now()}`
+    const movie: TmdbMovie = {
+      tmdbId: manualId,
       title,
       originalTitle: manualForm.originalTitle.trim() || undefined,
       year: parseOptionalNumber(manualForm.year),
@@ -380,7 +382,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     void openConfirmStep(movie)
   }, [manualForm])
 
-  const openConfirmStep = async (movie: WikidataMovie) => {
+  const openConfirmStep = async (movie: TmdbMovie) => {
     setSelectedMovie(movie)
     setCoverOptions([])
     setSelectedCoverUrl('')
@@ -390,9 +392,9 @@ export function Scan({ settings, onSuccess }: ScanProps) {
 
     try {
       const options: CoverOption[] = []
-      const wikidataCover = normalizeCoverUrl(movie.coverUrl)
-      if (wikidataCover) {
-        options.push({ id: 'tmdb', label: t('scan.coverOptionTmdb'), url: wikidataCover })
+      const tmdbCover = normalizeCoverUrl(movie.coverUrl)
+      if (tmdbCover) {
+        options.push({ id: 'tmdb', label: t('scan.coverOptionTmdb'), url: tmdbCover })
       }
 
       const geminiCover = normalizeCoverUrl(geminiGuess?.coverImageUrl)
@@ -402,7 +404,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
 
       const immediateOptions = dedupeCoverOptions(options)
       setCoverOptions(immediateOptions)
-      setSelectedCoverUrl(immediateOptions[0]?.url ?? wikidataCover ?? '')
+      setSelectedCoverUrl(immediateOptions[0]?.url ?? tmdbCover ?? '')
 
       setStatusMessage(t('scan.statusSearchingPoster'))
       const searchedPoster = await withTimeout(
@@ -417,7 +419,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
 
       const uniqueOptions = dedupeCoverOptions(options)
       setCoverOptions(uniqueOptions)
-      setSelectedCoverUrl(uniqueOptions[0]?.url ?? wikidataCover ?? '')
+      setSelectedCoverUrl(uniqueOptions[0]?.url ?? tmdbCover ?? '')
     } catch {
       const fallbackCover = normalizeCoverUrl(movie.coverUrl) ?? ''
       setCoverOptions(fallbackCover ? [{ id: 'fallback', label: t('scan.coverOptionFallback'), url: fallbackCover }] : [])
@@ -435,10 +437,10 @@ export function Scan({ settings, onSuccess }: ScanProps) {
     setStatusMessage(t('scan.statusLoadingDetails'))
 
     try {
-      const isLocalCandidate = selectedMovie.wikidataId.startsWith('gemini:') || selectedMovie.wikidataId.startsWith('manual:')
+      const isLocalCandidate = selectedMovie.tmdbId.startsWith('gemini:') || selectedMovie.tmdbId.startsWith('manual:')
 
       // Zusätzliche Details von TMDB
-      const wikiDetails = await window.api.getWikipediaDetails(selectedMovie.title, settings.language)
+      const tmdbDetails = await window.api.getTmdbDetails(selectedMovie.title, settings.language)
 
       setStatusMessage(t('scan.statusSaving'))
       await saveStoredMovie(
@@ -449,9 +451,9 @@ export function Scan({ settings, onSuccess }: ScanProps) {
           genres: selectedMovie.genres,
           cast_members: selectedMovie.cast,
           director: selectedMovie.director,
-          description: selectedMovie.description || wikiDetails.description,
+          description: selectedMovie.description || tmdbDetails.description,
           cover_url: selectedCoverUrl || selectedMovie.coverUrl || undefined,
-          wikidata_id: isLocalCandidate ? undefined : selectedMovie.wikidataId,
+          wikidata_id: isLocalCandidate ? undefined : selectedMovie.tmdbId,
           imdb_id: selectedMovie.imdbId,
           runtime: selectedMovie.runtime,
           bluray_photo_url: undefined,
@@ -635,7 +637,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                 <p className="text-slate-400 text-sm">{t('scan.results', { count: candidates.length })}</p>
                 {candidates.map((movie) => (
                   <button
-                    key={movie.wikidataId}
+                    key={movie.tmdbId}
                     onClick={() => { void openConfirmStep(movie) }}
                     className="w-full flex items-center gap-4 p-4 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 hover:border-brand-500 transition-all text-left"
                   >
@@ -803,7 +805,7 @@ export function Scan({ settings, onSuccess }: ScanProps) {
                     <InfoRow label={t('scan.infoYear')} value={selectedMovie.year?.toString()} />
                     <InfoRow label={t('scan.infoDirector')} value={selectedMovie.director} />
                     <InfoRow label={t('scan.infoRuntime')} value={selectedMovie.runtime ? t('scan.runtime', { value: selectedMovie.runtime }) : undefined} />
-                    <InfoRow label={t('scan.infoWikidata')} value={selectedMovie.wikidataId} />
+                    <InfoRow label={t('scan.infoTmdb')} value={selectedMovie.tmdbId} />
                   </div>
                   {selectedMovie.genres.length > 0 && (
                     <div className="flex flex-wrap gap-1">

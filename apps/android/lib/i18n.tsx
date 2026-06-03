@@ -71,7 +71,7 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'scan.scanNext': 'Weiteres Cover scannen',
     'scan.toLibrary': 'Zur Bibliothek',
     'scan.noKeyTitle': 'Kein Gemini API Key',
-    'scan.noKeyHint': 'Um die Kamera-Scan-Funktion zu nutzen, bitte einen Gemini API Key in den Einstellungen hinterlegen. Ohne Key kannst du weiterhin Filmdetails manuell eingeben oder ein Foto aus deiner Galerie auswählen.',
+    'scan.noKeyHint': 'Um die Kamera-Scan-Funktion zu nutzen, bitte einen Gemini API Key in den Einstellungen hinterlegen. Ohne Key kannst du weiterhin Filmdetails manuell eingeben.',
     'scan.noKeySettings': 'Zu den Einstellungen',
     'scan.fetchDetails': 'Hole Filmdetails von TMDB...',
 
@@ -208,7 +208,7 @@ const dictionaries: Record<AppLanguage, Dictionary> = {
     'scan.scanNext': 'Scan another cover',
     'scan.toLibrary': 'Back to library',
     'scan.noKeyTitle': 'No Gemini API Key',
-    'scan.noKeyHint': 'To use the camera scan feature, please add a Gemini API key in the settings. Without a key, you can still enter movie details manually or pick a photo from your gallery.',
+    'scan.noKeyHint': 'To use the camera scan feature, please add a Gemini API key in the settings. Without a key, you can still enter movie details manually.',
     'scan.noKeySettings': 'Go to settings',
     'scan.fetchDetails': 'Fetching movie details from TMDB...',
 

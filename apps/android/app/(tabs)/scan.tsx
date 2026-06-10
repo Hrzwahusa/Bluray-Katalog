@@ -87,7 +87,7 @@ async function recognizeTitleWithGemini(base64: string, geminiKey: string): Prom
 }
 
 export default function ScanScreen() {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const [permission, requestPermission] = useCameraPermissions()
   const cameraRef = useRef<CameraView>(null)
 
@@ -187,7 +187,7 @@ export default function ScanScreen() {
       setError(null)
       setCandidates([])
 
-      const results = await searchMovieFuzzy(trimmed)
+      const results = await searchMovieFuzzy(trimmed, language)
       if (results.length > 0) {
         setCandidates(results)
       } else {
@@ -204,7 +204,7 @@ export default function ScanScreen() {
   const selectMovie = async (movie: TmdbMovie) => {
     try {
       setStatus(t('scan.fetchDetails'))
-      const details = await getMovieDetails(movie.tmdbId)
+      const details = await getMovieDetails(movie.tmdbId, language)
       setSelectedMovie(details ?? movie)
     } catch {
       setSelectedMovie(movie)
@@ -353,7 +353,7 @@ export default function ScanScreen() {
 
   // ── Alle anderen Schritte ───────────────────────────────────────────
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       {selectedMovie?.coverUrl && step === 'confirm' && (
         <Image source={{ uri: selectedMovie.coverUrl }} style={styles.preview} resizeMode="contain" />
       )}

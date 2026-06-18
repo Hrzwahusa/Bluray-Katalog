@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Datenschutzerklaerung - Blu-ray Katalog</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        color: #1f2937;
+        background: #f8fafc;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+      h1, h2 {
+        line-height: 1.25;
+        color: #0f172a;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      .card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+      }
+      code {
+        background: #f1f5f9;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      ul {
+        padding-left: 20px;
+      }
+      .meta {
+        color: #475569;
+      }
+      a {
+        color: #2563eb;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>Datenschutzerklaerung fuer Blu-ray Katalog</h1>
+      <p class="meta">Stand: 2026-05-26</p>
+
+      <section class="card">
+        <h2>1. Verantwortliche Stelle</h2>
+        <p>
+          Verantwortlich fuer die Datenverarbeitung im Rahmen dieser App ist:
+          <br />
+          <strong>[Dein Name oder Firmenname]</strong><br />
+          <strong>[Deine Kontakt-E-Mail]</strong>
+        </p>
+        <p>
+          Bitte ersetze die Platzhalter vor der Veroeffentlichung durch deine echten Kontaktdaten.
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>2. Allgemeine Informationen</h2>
+        <p>
+          Die App <strong>Blu-ray Katalog</strong> dient zur Verwaltung einer privaten Blu-ray-Sammlung.
+          Je nach Nutzung verarbeitet die App technische und inhaltliche Daten, die fuer die Funktionen
+          der App erforderlich sind.
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>3. Verarbeitete Daten und Zweck</h2>
+        <ul>
+          <li><strong>Kamera/Galerie:</strong> Fotos von Blu-ray-Covern fuer Erkennung und Speicherung.</li>
+          <li><strong>Manuell eingegebene Inhalte:</strong> Titel, Metadaten und optionale Notizen zur Filmverwaltung.</li>
+          <li><strong>API-Schluessel in der App:</strong> Ein optional hinterlegter Gemini API-Key wird lokal auf dem Geraet gespeichert (Expo SecureStore).</li>
+          <li><strong>Netzwerkzugriffe:</strong> Abrufe zu TMDB sowie optional Google Gemini fuer OCR/Titelerkennung.</li>
+          <li><strong>Supabase:</strong> Falls von dir konfiguriert, werden Filmdaten in deinem Supabase-Projekt gespeichert und synchronisiert.</li>
+        </ul>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>4. Berechtigungen</h2>
+        <p>Die App kann folgende Android-Berechtigungen verwenden:</p>
+        <ul>
+          <li><code>android.permission.CAMERA</code> fuer das Fotografieren von Covern.</li>
+          <li><code>android.permission.READ_EXTERNAL_STORAGE</code> bzw. Medienzugriff fuer Auswahl aus der Galerie (abhaengig von Android-Version).</li>
+          <li><code>android.permission.WRITE_EXTERNAL_STORAGE</code> nur wenn fuer Dateizugriffe auf aelteren Android-Versionen notwendig.</li>
+          <li><code>android.permission.INTERNET</code> fuer Online-Suche und API-Aufrufe.</li>
+          <li><code>android.permission.RECORD_AUDIO</code> kann technisch durch verwendete Kamera-Bibliotheken angefordert werden; die App nutzt keine Audioaufnahme als Kernfunktion.</li>
+        </ul>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>5. Empfaenger / Drittanbieter</h2>
+        <p>Je nach Nutzung koennen Daten an folgende Dienste uebertragen werden:</p>
+        <ul>
+          <li>Google Gemini API (nur wenn ein Gemini-Key konfiguriert wurde)</li>
+          <li>TMDB (Metadaten und Coverquellen)</li>
+          <li>Supabase (nur wenn vom Nutzer konfiguriert)</li>
+        </ul>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>6. Speicherung und Loeschung</h2>
+        <p>
+          Lokale App-Daten verbleiben grundsaetzlich auf dem Geraet.
+          In Supabase gespeicherte Daten verbleiben dort, bis sie durch dich geloescht werden.
+          Du kannst App-Daten durch Deinstallation oder durch Loeschung in der App entfernen.
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>7. Weitergabe und Verkauf von Daten</h2>
+        <p>
+          Personenbezogene Daten werden nicht verkauft.
+          Eine Weitergabe erfolgt nur, soweit sie fuer die bereitgestellten Funktionen technisch erforderlich ist
+          (siehe Abschnitt Drittanbieter).
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>8. Kinder</h2>
+        <p>
+          Die App richtet sich nicht speziell an Kinder.
+          Es erfolgt keine wissentlich gezielte Datenerhebung von Kindern.
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>9. Deine Rechte</h2>
+        <p>
+          Je nach anwendbarem Recht hast du Rechte auf Auskunft, Berichtigung, Loeschung,
+          Einschraenkung der Verarbeitung und Datenuebertragbarkeit.
+          Wende dich dazu an die oben genannte Kontaktadresse.
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2>10. Aenderungen dieser Datenschutzerklaerung</h2>
+        <p>
+          Diese Datenschutzerklaerung kann angepasst werden, wenn sich Funktionen oder rechtliche
+          Anforderungen aendern. Es gilt jeweils die hier veroeffentlichte Fassung.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
